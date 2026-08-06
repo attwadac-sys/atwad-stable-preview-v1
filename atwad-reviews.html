@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>آراء العملاء — مؤسسة أطواد</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<style>
+  :root {
+    --primary:  #0b3d6b;
+    --teal:     #00b4d8;
+    --teal2:    #0096c7;
+    --ice:      #e0f4ff;
+    --frost:    #caf0f8;
+    --bg:       #edf6fb;
+    --card:     #ffffff;
+    --text:     #0b2a3d;
+    --muted:    #5a7a8a;
+    --border:   #c8e6f5;
+    --star:     #f5a623;
+    --shadow:   0 4px 24px rgba(11,61,107,0.10);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Cairo', 'Tajawal', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: linear-gradient(135deg, #0b3d6b 0%, #0e5fa8 60%, #00b4d8 100%);
+    padding: 24px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+
+  header::before {
+    content: '❄';
+    position: absolute;
+    right: 40px; top: -10px;
+    font-size: 100px;
+    opacity: 0.06;
+    color: #fff;
+  }
+
+  .header-left { display: flex; align-items: center; gap: 16px; position: relative; z-index: 1; }
+
+  .back-btn {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff;
+    padding: 9px 18px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-family: 'Cairo', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background 0.2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .back-btn:hover { background: rgba(255,255,255,0.25); }
+
+  .page-title h1 { font-size: 21px; font-weight: 900; color: #fff; font-family: 'Cairo', sans-serif; }
+  .page-title p  { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 2px; }
+
+  /* STATS */
+  .stats-row {
+    max-width: 1100px;
+    margin: 28px auto 0;
+    padding: 0 24px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+
+  .stat-card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 18px;
+    text-align: center;
+    box-shadow: var(--shadow);
+    border: 1.5px solid var(--border);
+  }
+
+  .stat-card .num { font-size: 26px; font-weight: 900; color: var(--primary); display: block; font-family: 'Cairo', sans-serif; }
+  .stat-card .lbl { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .stat-card.teal .num { color: var(--teal2); }
+  .stat-card.gold .num { color: var(--star); }
+
+  /* MAIN LAYOUT */
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 26px 24px 60px;
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  /* FORM */
+  .form-card {
+    background: var(--card);
+    border-radius: 18px;
+    padding: 26px;
+    box-shadow: var(--shadow);
+    border: 1.5px solid var(--border);
+    position: sticky;
+    top: 24px;
+  }
+
+  .form-card h2 {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--primary);
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Cairo', sans-serif;
+  }
+
+  .field { margin-bottom: 16px; }
+
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+    font-family: 'Cairo', sans-serif;
+  }
+
+  input, textarea, select {
+    width: 100%;
+    padding: 10px 13px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-family: 'Cairo', 'Tajawal', sans-serif;
+    font-size: 14px;
+    color: var(--text);
+    background: #f5fafd;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+
+  input:focus, textarea:focus, select:focus {
+    border-color: var(--teal);
+    background: #fff;
+  }
+
+  textarea { resize: vertical; min-height: 85px; }
+
+  /* STARS */
+  .stars-input {
+    display: flex;
+    gap: 4px;
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+  }
+
+  .stars-input input { display: none; }
+
+  .stars-input label {
+    font-size: 30px;
+    cursor: pointer;
+    color: #d0e8f0;
+    transition: color 0.15s;
+    margin: 0;
+    line-height: 1;
+  }
+
+  .stars-input input:checked ~ label,
+  .stars-input label:hover,
+  .stars-input label:hover ~ label {
+    color: var(--star);
+  }
+
+  /* SERVICE TAGS */
+  .service-tags { display: flex; flex-wrap: wrap; gap: 7px; }
+
+  .service-tag {
+    padding: 5px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #f5fafd;
+    color: var(--muted);
+    font-family: 'Cairo', sans-serif;
+    user-select: none;
+  }
+
+  .service-tag.active {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: #fff;
+  }
+
+  /* SUBMIT */
+  .submit-btn {
+    width: 100%;
+    padding: 13px;
+    background: linear-gradient(135deg, #0096c7, #00b4d8);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Cairo', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.15s;
+    margin-top: 6px;
+    box-shadow: 0 4px 16px rgba(0,180,216,0.35);
+  }
+
+  .submit-btn:hover { opacity: 0.90; transform: translateY(-1px); }
+  .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  /* REVIEWS */
+  .reviews-section h2 {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--primary);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: 'Cairo', sans-serif;
+  }
+
+  .filter-bar { display: flex; gap: 7px; margin-bottom: 18px; flex-wrap: wrap; }
+
+  .filter-btn {
+    padding: 6px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 20px;
+    font-family: 'Cairo', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    background: var(--card);
+    color: var(--muted);
+    transition: all 0.2s;
+  }
+
+  .filter-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+  /* REVIEW CARD */
+  .review-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+    border: 1.5px solid var(--border);
+    margin-bottom: 14px;
+    animation: slideIn 0.3s ease;
+    transition: transform 0.2s;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .review-card:hover { transform: translateY(-2px); }
+
+  .review-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+  }
+
+  .reviewer-info { display: flex; align-items: center; gap: 11px; }
+
+  .reviewer-avatar {
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #0096c7, #00b4d8);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px;
+    color: #fff;
+    font-weight: 700;
+    flex-shrink: 0;
+    font-family: 'Cairo', sans-serif;
+  }
+
+  .reviewer-name { font-size: 14px; font-weight: 700; color: var(--text); font-family: 'Cairo', sans-serif; }
+  .reviewer-date { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .stars-display { color: var(--star); font-size: 15px; letter-spacing: 1px; }
+
+  .review-service {
+    display: inline-block;
+    padding: 3px 10px;
+    background: var(--ice);
+    color: var(--teal2);
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 9px;
+    font-family: 'Cairo', sans-serif;
+  }
+
+  .review-text {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+    background: #f5fafd;
+    padding: 11px 13px;
+    border-radius: 10px;
+    border-right: 3px solid var(--teal);
+  }
+
+  .review-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 11px;
+  }
+
+  .delete-btn {
+    background: none;
+    border: none;
+    color: #c0392b;
+    cursor: pointer;
+    font-size: 12px;
+    opacity: 0.45;
+    transition: opacity 0.2s;
+    font-family: 'Cairo', sans-serif;
+  }
+
+  .delete-btn:hover { opacity: 1; }
+
+  .rating-badge {
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'Cairo', sans-serif;
+  }
+
+  .badge-5 { background: #e0f4ff; color: #0096c7; }
+  .badge-4 { background: #e5f5ee; color: #2e9e6b; }
+  .badge-3 { background: #fdf3e3; color: #e8a020; }
+  .badge-2, .badge-1 { background: #fdecea; color: #c0392b; }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+
+  .empty-state .icon { font-size: 46px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--primary);
+    color: #fff;
+    padding: 13px 26px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+    transition: transform 0.3s ease;
+    z-index: 1000;
+    font-family: 'Cairo', sans-serif;
+  }
+
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { background: #0096c7; }
+  .toast.error   { background: #c0392b; }
+
+  footer {
+    background: var(--primary);
+    color: rgba(255,255,255,0.45);
+    text-align: center;
+    padding: 18px;
+    font-size: 13px;
+    font-family: 'Cairo', sans-serif;
+  }
+
+  footer strong { color: var(--teal); }
+
+  @media (max-width: 768px) {
+    main { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .form-card { position: static; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <a href="index.html" class="back-btn">← الرئيسية</a>
+    <div class="page-title">
+      <h1>⭐ آراء العملاء</h1>
+      <p>تقييمات وتعليقات عملاء مؤسسة أطواد</p>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- FORM -->
+  <div class="form-card">
+    <h2>✍️ إضافة رأي جديد</h2>
+
+    <div class="field">
+      <label>اسم العميل</label>
+      <input type="text" id="customerName" placeholder="أدخل اسم العميل..." list="customersList">
+      <datalist id="customersList"></datalist>
+    </div>
+
+    <div class="field">
+      <label>التقييم</label>
+      <div class="stars-input">
+        <input type="radio" name="rating" id="s5" value="5"><label for="s5">★</label>
+        <input type="radio" name="rating" id="s4" value="4"><label for="s4">★</label>
+        <input type="radio" name="rating" id="s3" value="3"><label for="s3">★</label>
+        <input type="radio" name="rating" id="s2" value="2"><label for="s2">★</label>
+        <input type="radio" name="rating" id="s1" value="1"><label for="s1">★</label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>نوع الخدمة</label>
+      <div class="service-tags" id="serviceTags">
+        <span class="service-tag" data-val="تكييف">❄️ تكييف</span>
+        <span class="service-tag" data-val="تنظيف">🧹 تنظيف</span>
+        <span class="service-tag" data-val="صيانة">🔧 صيانة</span>
+        <span class="service-tag" data-val="تركيب">⚙️ تركيب</span>
+        <span class="service-tag" data-val="فحص">🔍 فحص</span>
+        <span class="service-tag" data-val="أخرى">📋 أخرى</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>التعليق</label>
+      <textarea id="reviewText" placeholder="اكتب رأي العميل وتجربته مع الخدمة..."></textarea>
+    </div>
+
+    <div class="field">
+      <label>هل يوصي بالخدمة؟</label>
+      <select id="recommend">
+        <option value="yes">✅ نعم، يوصي بها</option>
+        <option value="no">❌ لا</option>
+      </select>
+    </div>
+
+    <button class="submit-btn" onclick="addReview()">💾 حفظ الرأي</button>
+  </div>
+
+</main>
+
+<footer>
+  <p>مؤسسة <strong>أطواد</strong> للتكييف والتنظيف — جدة &copy; 2026</p>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  firebase.initializeApp({ databaseURL: "https://atwad-booking-default-rtdb.firebaseio.com" });
+  const db = firebase.database();
+
+  // الصفحة العامة لا تحتفظ بقائمة تقييمات محلية
+  let selectedService = '';
+
+  // Service tags
+  document.querySelectorAll('.service-tag').forEach(tag => {
+    tag.addEventListener('click', () => {
+      document.querySelectorAll('.service-tag').forEach(t => t.classList.remove('active'));
+      tag.classList.add('active');
+      selectedService = tag.dataset.val;
+    });
+  });
+
+  // ملاحظة: صفحة التقييم العامة لا تقرأ بيانات العملاء من Firebase
+
+  // الصفحة العامة لا تقرأ ولا تعرض ولا تحذف التقييمات —
+  // renderReviews / updateStats / filterReviews / deleteReview محذوفة بالكامل
+
+  function addReview() {
+    const name   = document.getElementById('customerName').value.trim();
+    const rInput = document.querySelector('input[name="rating"]:checked');
+    const text   = document.getElementById('reviewText').value.trim();
+    const rec    = document.getElementById('recommend').value;
+
+    if (!name)   { showToast('⚠️ أدخل اسم العميل', 'error'); return; }
+    if (!rInput) { showToast('⚠️ اختر التقييم بالنجوم', 'error'); return; }
+
+    const btn = document.querySelector('.submit-btn');
+    btn.disabled = true; btn.textContent = '⏳ جاري الحفظ...';
+
+    db.ref('reviews').push({
+      customerName: name,
+      rating: parseInt(rInput.value),
+      service: selectedService || '',
+      text, recommend: rec,
+      timestamp: Date.now()
+    }).then(() => {
+      showToast('✅ تم حفظ الرأي بنجاح!', 'success');
+      document.getElementById('customerName').value = '';
+      document.querySelectorAll('input[name="rating"]').forEach(r=>r.checked=false);
+      document.getElementById('reviewText').value = '';
+      document.getElementById('recommend').value = 'yes';
+      document.querySelectorAll('.service-tag').forEach(t=>t.classList.remove('active'));
+      selectedService = '';
+      btn.disabled = false; btn.textContent = '💾 حفظ الرأي';
+    }).catch(err => {
+      showToast('❌ خطأ: ' + err.message, 'error');
+      btn.disabled = false; btn.textContent = '💾 حفظ الرأي';
+    });
+  }
+
+  function showToast(msg, type='') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast ' + type;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  // ملاحظة: صفحة التقييم العامة لا تُشغّل loadCustomers
+  // إدارة التقييمات تتطلب تسجيل الدخول الإداري في صفحة مستقلة
+</script>
+</body>
+</html>

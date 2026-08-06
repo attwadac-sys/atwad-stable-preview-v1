@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مؤسسة أطواد - إدارة العمليات</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap');
+:root{
+  --deep:#0C3B5E;--steel:#1E5F8A;--sky:#0EA5E9;--ice:#E8F4FD;--frost:#F0F9FF;
+  --slate:#334155;--mist:#94A3B8;--success:#10B981;--warning:#F59E0B;--danger:#EF4444;--purple:#8B5CF6;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
+
+.sidebar{position:fixed;right:0;top:0;bottom:0;width:230px;background:linear-gradient(180deg,var(--deep),var(--steel));z-index:200;display:flex;flex-direction:column;}
+.sidebar-logo{padding:22px 18px 18px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:12px;}
+.sidebar-logo .icon{width:42px;height:42px;background:linear-gradient(135deg,var(--sky),#38BDF8);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;}
+.sidebar-logo h1{color:#fff;font-size:16px;font-weight:800;}
+.sidebar-logo p{color:rgba(255,255,255,.5);font-size:11px;}
+.nav-section{padding:14px 10px 6px;}
+.nav-label{color:rgba(255,255,255,.3);font-size:10px;font-weight:700;padding:0 8px 5px;letter-spacing:1px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;color:rgba(255,255,255,.7);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s;margin-bottom:2px;}
+.nav-item:hover{background:rgba(255,255,255,.08);color:#fff;}
+.nav-item.active{background:rgba(14,165,233,.22);color:var(--sky);font-weight:700;}
+.nav-icon{font-size:16px;width:20px;text-align:center;}
+
+.main{margin-right:230px;}
+.topbar{background:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1.5px solid #E2E8F0;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.topbar-title{font-size:18px;font-weight:800;color:var(--deep);}
+.topbar-sub{font-size:12px;color:var(--mist);margin-top:1px;}
+.btn-primary{background:linear-gradient(90deg,var(--deep),var(--sky));color:#fff;border:none;border-radius:10px;padding:9px 18px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(14,165,233,.3);transition:all .2s;}
+.btn-primary:hover{transform:translateY(-1px);}
+
+.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;padding:18px 22px 0;}
+.stat-card{background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 2px 10px rgba(0,0,0,.04);border-right:3px solid transparent;cursor:pointer;transition:all .2s;}
+.stat-card:hover{transform:translateY(-2px);}
+.stat-card.open{border-color:var(--sky);}
+.stat-card.inprog{border-color:var(--warning);}
+.stat-card.done{border-color:var(--success);}
+.stat-card.incomplete{border-color:#F59E0B;}
+.incomplete-badge{position:absolute;top:7px;left:7px;background:#F59E0B;color:#fff;border-radius:20px;font-size:10px;font-weight:800;padding:2px 7px;}
+.wo-card{position:relative;}
+.wo-incomplete-warn{background:#FEF9C3;border:1.5px solid #FDE68A;border-radius:10px;padding:9px 13px;font-size:12px;color:#92400E;margin-bottom:14px;display:none;}
+.wo-incomplete-warn.show{display:block;}
+/* تقرير الأوامر الناقصة */
+.incomplete-report{background:#fff;border-radius:14px;padding:16px 20px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:16px;display:none;}
+.incomplete-report.show{display:block;}
+.incomplete-report h4{font-size:13px;font-weight:800;color:#92400E;margin-bottom:10px;}
+.incomplete-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px dashed #FDE68A;font-size:12px;}
+.incomplete-row:last-child{border-bottom:none;}
+.incomplete-row .fix-btn{padding:4px 10px;background:#FEF3C7;color:#92400E;border:none;border-radius:7px;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:700;cursor:pointer;}
+.stat-card.all-s{border-color:var(--slate);}
+.stat-icon{font-size:20px;margin-bottom:5px;}
+.stat-num{font-size:22px;font-weight:800;color:var(--deep);}
+.stat-lbl{font-size:10px;color:var(--mist);}
+
+/* FILTERS */
+.toolbar{display:flex;align-items:center;gap:10px;padding:14px 22px;flex-wrap:wrap;}
+.filter-btn{padding:7px 14px;border-radius:20px;border:1.5px solid #E2E8F0;background:#fff;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:600;color:var(--mist);cursor:pointer;transition:all .2s;}
+.filter-btn.active,.filter-btn:hover{border-color:var(--sky);color:var(--sky);background:var(--ice);}
+.search-wrap{flex:1;position:relative;min-width:180px;}
+.search-wrap input{width:100%;padding:8px 14px 8px 36px;border:1.5px solid #E2E8F0;border-radius:10px;font-family:'Tajawal',sans-serif;font-size:13px;outline:none;background:var(--frost);}
+.search-wrap input:focus{border-color:var(--sky);background:#fff;}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--mist);}
+
+/* WORK ORDERS GRID */
+.wo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;padding:0 22px 30px;}
+.wo-card{background:#fff;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,.06);overflow:hidden;cursor:pointer;transition:all .2s;border-top:3px solid var(--sky);}
+.wo-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.1);}
+.wo-card.s-open{border-color:var(--sky);}
+.wo-card.s-inprogress{border-color:var(--warning);}
+.wo-card.s-done{border-color:var(--success);}
+.wo-card.s-invoiced{border-color:var(--purple);}
+.wo-header{padding:14px 16px 10px;display:flex;justify-content:space-between;align-items:flex-start;}
+.wo-id{font-size:11px;font-weight:700;color:var(--mist);}
+.wo-status{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+.ws-open{background:#E0F2FE;color:#0369A1;}
+.ws-inprogress{background:#FEF3C7;color:#92400E;}
+.ws-done{background:#D1FAE5;color:#065F46;}
+.ws-invoiced{background:#EDE9FE;color:#6D28D9;}
+.wo-client{font-size:15px;font-weight:800;color:var(--deep);padding:0 16px 4px;}
+.wo-service{font-size:12px;color:var(--mist);padding:0 16px 10px;}
+.wo-meta{padding:10px 16px;background:var(--frost);display:flex;gap:14px;font-size:12px;color:var(--mist);}
+.wo-meta span{display:flex;align-items:center;gap:4px;}
+.wo-footer{padding:10px 16px;display:flex;align-items:center;justify-content:space-between;}
+.wo-price{font-size:16px;font-weight:800;color:var(--deep);}
+.wo-actions{display:flex;gap:6px;}
+.wa-btn{padding:5px 10px;border:none;border-radius:7px;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;}
+.wa-open{background:var(--ice);color:var(--sky);}
+.wa-invoice{background:#EDE9FE;color:var(--purple);}
+.wa-done{background:#D1FAE5;color:var(--success);}
+
+/* STEP MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(12,59,94,.5);z-index:500;display:none;align-items:center;justify-content:center;backdrop-filter:blur(3px);}
+.modal-overlay.open{display:flex;}
+.modal{background:#fff;border-radius:20px;width:100%;max-width:680px;max-height:93vh;overflow-y:auto;box-shadow:0 20px 60px rgba(12,59,94,.25);animation:slideUp .3s cubic-bezier(.34,1.56,.64,1);}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-hdr{padding:18px 22px 14px;background:linear-gradient(90deg,var(--frost),var(--ice));border-bottom:1.5px solid rgba(14,165,233,.12);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
+.modal-hdr h3{font-size:16px;font-weight:800;color:var(--deep);}
+.modal-close{width:28px;height:28px;border-radius:50%;border:none;background:#E2E8F0;color:var(--slate);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.modal-close:hover{background:var(--danger);color:#fff;}
+.modal-body{padding:20px 22px;}
+
+/* STEPS PROGRESS */
+.steps-progress{display:flex;align-items:center;margin-bottom:22px;}
+.sp-step{display:flex;flex-direction:column;align-items:center;flex:1;}
+.sp-circle{width:32px;height:32px;border-radius:50%;background:var(--ice);color:var(--mist);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;transition:all .3s;}
+.sp-step.active .sp-circle{background:var(--sky);color:#fff;box-shadow:0 0 0 4px rgba(14,165,233,.2);}
+.sp-step.done .sp-circle{background:var(--success);color:#fff;}
+.sp-label{font-size:10px;color:var(--mist);margin-top:4px;font-weight:600;}
+.sp-step.active .sp-label{color:var(--sky);}
+.sp-step.done .sp-label{color:var(--success);}
+.sp-line{flex:1;height:2px;background:var(--ice);margin:0 4px;margin-bottom:16px;}
+.sp-line.done{background:var(--success);}
+
+/* FORM */
+.section-title{font-size:13px;font-weight:700;color:var(--deep);margin-bottom:12px;padding-bottom:6px;border-bottom:1.5px solid var(--ice);}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.form-group{margin-bottom:12px;}
+.form-group label{display:block;font-size:12px;font-weight:700;color:var(--slate);margin-bottom:5px;}
+.req{color:var(--danger);}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:9px 12px;border:1.5px solid #E2E8F0;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:14px;color:var(--slate);background:var(--frost);outline:none;transition:all .2s;direction:rtl;}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--sky);background:#fff;box-shadow:0 0 0 3px rgba(14,165,233,.1);}
+
+/* PHOTO UPLOAD */
+.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+.photo-box{aspect-ratio:1;border:2px dashed #E2E8F0;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;background:var(--frost);position:relative;overflow:hidden;}
+.photo-box:hover{border-color:var(--sky);background:var(--ice);}
+.photo-box img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;}
+.photo-box .photo-label{font-size:11px;color:var(--mist);margin-top:4px;}
+.photo-box .photo-icon{font-size:24px;}
+.photo-box input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;}
+
+/* SIGNATURE PAD */
+.sig-wrap{border:1.5px solid #E2E8F0;border-radius:12px;overflow:hidden;margin-bottom:12px;background:#fff;}
+.sig-header{padding:8px 14px;background:var(--frost);border-bottom:1px solid var(--ice);display:flex;justify-content:space-between;align-items:center;}
+.sig-header span{font-size:12px;font-weight:700;color:var(--slate);}
+.sig-clear{padding:4px 10px;border:none;background:var(--ice);border-radius:6px;font-family:'Tajawal',sans-serif;font-size:11px;color:var(--mist);cursor:pointer;}
+#sigCanvas{display:block;width:100%;height:160px;cursor:crosshair;touch-action:none;}
+
+/* INVOICE */
+.invoice-preview{border:1.5px solid var(--ice);border-radius:14px;overflow:hidden;margin-bottom:16px;}
+.invoice-top{background:linear-gradient(90deg,var(--deep),var(--steel));padding:16px 20px;display:flex;justify-content:space-between;align-items:center;}
+.invoice-top h2{color:#fff;font-size:16px;font-weight:800;}
+.invoice-top .inv-num{color:rgba(255,255,255,.7);font-size:12px;}
+.invoice-body{padding:16px 20px;}
+.inv-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--ice);font-size:13px;}
+.inv-row:last-child{border-bottom:none;}
+.inv-row .label{color:var(--mist);}
+.inv-row .value{font-weight:700;color:var(--deep);}
+.inv-total{background:var(--deep);color:#fff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;}
+.inv-total .t-label{font-size:14px;font-weight:600;}
+.inv-total .t-price{font-size:22px;font-weight:800;color:var(--sky);}
+
+/* RATING */
+.rating-stars{display:flex;gap:8px;font-size:32px;cursor:pointer;margin:8px 0 16px;}
+.star{opacity:.3;transition:all .2s;}
+.star.active{opacity:1;}
+
+/* MODAL FOOTER */
+.modal-footer{padding:14px 22px;border-top:1px solid #F1F5F9;display:flex;gap:10px;justify-content:space-between;position:sticky;bottom:0;background:#fff;z-index:10;}
+.btn-back{padding:9px 18px;border:1.5px solid #E2E8F0;border-radius:9px;background:#fff;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:600;color:var(--slate);cursor:pointer;}
+.btn-next{padding:9px 24px;border:none;border-radius:9px;background:linear-gradient(90deg,var(--deep),var(--sky));color:#fff;font-family:'Tajawal',sans-serif;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(14,165,233,.3);}
+
+/* SUCCESS */
+.success-screen{text-align:center;padding:40px 20px;}
+.success-anim{width:80px;height:80px;background:linear-gradient(135deg,var(--success),#34D399);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:38px;margin:0 auto 18px;box-shadow:0 0 0 12px rgba(16,185,129,.12);animation:popIn .5s cubic-bezier(.34,1.56,.64,1);}
+@keyframes popIn{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--deep);color:#fff;padding:10px 22px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.2);transition:transform .3s;z-index:999;}
+.toast.show{transform:translateX(-50%) translateY(0);}
+
+@media(max-width:900px){.sidebar{display:none;}.main{margin-right:0;}.stats-row{grid-template-columns:repeat(3,1fr);}.wo-grid{grid-template-columns:1fr;}}
+
+.lang-btn{padding:7px 14px;background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);border-radius:8px;color:#fff;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;}
+.lang-btn:hover{background:rgba(255,255,255,.25);}
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
+<script src="atwad-admin-auth.js"></script>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="sidebar-logo"><div class="icon">❄️</div><div><h1 id="nav-brand">أطواد</h1><p id="nav-brandsub">لصيانة المكيفات</p></div></div>
+  <div class="nav-section">
+    <div class="nav-label">القائمة</div>
+    <div class="nav-item" id="nav-clients" id="nav-clients" id="nav-clients" onclick="location.href='atwad-customers.html'"><span class="nav-icon">👥</span> العملاء</div>
+    <div class="nav-item" id="nav-appts" id="nav-appts" id="nav-appts" onclick="location.href='atwad-appointments.html'"><span class="nav-icon">📅</span> المواعيد</div>
+    <div class="nav-item active" id="nav-wo" id="nav-wo" id="nav-wo" onclick="location.href='atwad-workorders.html'"><span class="nav-icon">🔧</span> أوامر العمل</div>
+    <div class="nav-item" id="nav-finance" id="nav-finance" id="nav-finance" onclick="location.href='atwad-finance.html'"><span class="nav-icon">💰</span> الإدارة المالية</div>
+    <div class="nav-item" id="nav-reports" id="nav-reports" id="nav-reports" onclick="location.href='atwad-reports.html'"><span class="nav-icon">📊</span> التقارير</div>
+  </div>
+  <div class="nav-section" style="margin-top:auto;border-top:1px solid rgba(255,255,255,.08);padding-top:10px;">
+    <div class="nav-item" id="nav-settings" onclick="alert('Settings — Coming Soon / قريباً ✨')"><span class="nav-icon">⚙️</span> الإعدادات</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div><div class="topbar-title" data-lang="title">🔧 أوامر العمل</div><div class="topbar-sub" data-lang="sub">فتح وإدارة عمليات الصيانة والتنظيف</div></div>
+    <button onclick="importWOFromFirebase()" id="importWOBtn" style="background:#fff;border:1.5px solid #0EA5E9;color:#0EA5E9;border-radius:10px;padding:9px 16px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;" data-lang="importBtn">📥 استيراد من الحجوزات</button>
+<button class="lang-btn" id="langBtn" onclick="toggleLang()">🌐 EN</button>
+      <button onclick="generateDailyReport()" style="padding:9px 14px;border-radius:10px;border:1.5px solid #E2E8F0;background:#fff;font-family:'Tajawal',sans-serif;font-size:13px;cursor:pointer;color:var(--slate);">📊 تقرير يومي</button>
+    <button class="btn-primary" onclick="openNewWO()">＋ أمر عمل جديد</button>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card all-s" onclick="setFilter('all')"><div class="stat-icon">📋</div><div class="stat-num" id="sAll">0</div><div class="stat-lbl">الكل</div></div>
+    <div class="stat-card open" onclick="setFilter('open')"><div class="stat-icon">🔵</div><div class="stat-num" id="sOpen">0</div><div class="stat-lbl">مفتوح</div></div>
+    <div class="stat-card inprog" onclick="setFilter('inprogress')"><div class="stat-icon">⚡</div><div class="stat-num" id="sInprog">0</div><div class="stat-lbl">قيد التنفيذ</div></div>
+    <div class="stat-card done" onclick="setFilter('done')"><div class="stat-icon">✅</div><div class="stat-num" id="sDone">0</div><div class="stat-lbl">مكتمل</div></div>
+    <div class="stat-card invoiced" onclick="setFilter('invoiced')"><div class="stat-icon">🧾</div><div class="stat-num" id="sInvoiced">0</div><div class="stat-lbl">فاتورة صادرة</div></div>
+    <div class="stat-card incomplete" onclick="toggleIncompleteReport()" style="cursor:pointer;"><div class="stat-icon">⚠️</div><div class="stat-num" id="sIncomplete">0</div><div class="stat-lbl">بيانات ناقصة</div></div>
+  </div>
+
+  <!-- تقرير الأوامر الناقصة -->
+  <div class="incomplete-report" id="incompleteReport">
+    <h4>⚠️ أوامر عمل تحتاج إكمال البيانات</h4>
+    <div id="incompleteList"></div>
+  </div>
+
+  <div class="toolbar">
+    <button class="filter-btn active" id="fAll" onclick="setFilter('all',this)">الكل</button>
+    <button class="filter-btn" id="fOpen" onclick="setFilter('open',this)">🔵 مفتوح</button>
+    <button class="filter-btn" id="fInprog" onclick="setFilter('inprogress',this)">⚡ قيد التنفيذ</button>
+    <button class="filter-btn" id="fDone" onclick="setFilter('done',this)">✅ مكتمل</button>
+    <button class="filter-btn" id="fInvoiced" onclick="setFilter('invoiced',this)">🧾 فاتورة</button>
+    <div class="search-wrap"><span class="search-icon">🔍</span><input placeholder="ابحث باسم العميل أو رقم الأمر..." oninput="renderWOs(this.value)"></div>
+  </div>
+
+  <div class="wo-grid" id="woGrid"></div>
+</div>
+
+<!-- WORK ORDER WIZARD MODAL -->
+<div class="modal-overlay" id="woModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3 id="woModalTitle">🔧 أمر عمل جديد</h3>
+      <button class="modal-close" onclick="closeWOModal()">×</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- STEPS PROGRESS -->
+      <div class="steps-progress" id="stepsBar">
+        <div class="sp-step active" id="sp1"><div class="sp-circle">1</div><div class="sp-label">البيانات</div></div>
+        <div class="sp-line" id="sl1"></div>
+        <div class="sp-step" id="sp2"><div class="sp-circle">2</div><div class="sp-label">الصور</div></div>
+        <div class="sp-line" id="sl2"></div>
+        <div class="sp-step" id="sp3"><div class="sp-circle">3</div><div class="sp-label">الفاتورة</div></div>
+        <div class="sp-line" id="sl3"></div>
+        <div class="sp-step" id="sp4"><div class="sp-circle">4</div><div class="sp-label">التوقيع</div></div>
+        <div class="sp-line" id="sl4"></div>
+        <div class="sp-step" id="sp5"><div class="sp-circle">5</div><div class="sp-label">التقييم</div></div>
+      </div>
+
+      <!-- STEP 1: BASIC INFO -->
+      <div id="step1">
+        <div class="section-title">📋 بيانات العملية</div>
+        <div class="form-row">
+          <div class="form-group"><label>اسم العميل <span class="req">*</span></label><input type="text" id="w_client" list="wClientList" placeholder="اسم العميل"><datalist id="wClientList"></datalist></div>
+          <div class="form-group"><label>رقم الجوال <span class="req">*</span></label><input type="tel" id="w_phone" placeholder="05xxxxxxxx"></div>
+        </div>
+        <div class="form-group"><label>العنوان <span class="req">*</span></label><input type="text" id="w_address" placeholder="الحي، الشارع..."></div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>نوع الخدمة <span class="req">*</span></label>
+            <select id="w_service">
+              <option value="">-- اختر --</option>
+              <option>تنظيف مكيف</option>
+              <option>تنظيف وغسيل المكيفات</option>
+              <option>صيانة دورية</option>
+              <option>تعبئة غاز</option>
+              <option>كشف وإصلاح أعطال</option>
+              <option>تركيب مكيف</option>
+              <option>باقة سنوية</option>
+            </select>
+          </div>
+          <div class="form-group"><label>نوع المكيف</label>
+            <select id="w_actype"><option value="">-- اختر --</option><option>سبليت</option><option>كاسيت</option><option>شباك</option><option>مركزي</option><option>داكت</option></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>عدد الوحدات</label><input type="number" id="w_units" value="1" min="1" max="50"></div>
+          <div class="form-group"><label>الفني <span class="req">*</span></label>
+            <select id="w_tech"><option value="">-- اختر --</option><option value="Abrar">أحمد</option><option value="Shoib">شعيب</option><option value="Suhail">سهيل</option></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>تاريخ الزيارة</label><input type="date" id="w_date"></div>
+          <div class="form-group"><label>وقت البداية</label><input type="time" id="w_time" value="09:00"></div>
+        </div>
+        <div class="form-group"><label>وصف المشكلة / ملاحظات</label><textarea id="w_problem" rows="2" placeholder="صف المشكلة أو الطلب..."></textarea></div>
+        <div class="form-group"><label>قطع الغيار المستخدمة</label><textarea id="w_parts" rows="2" placeholder="مثال: فريون R22، كباستر 35 ميكروفاراد..."></textarea></div>
+      </div>
+
+      <!-- STEP 2: PHOTOS -->
+      <div id="step2" style="display:none">
+        <div class="section-title">📸 صور قبل وبعد</div>
+        <div style="margin-bottom:10px;font-size:13px;color:var(--mist);">التقط صوراً توثيقية للعملية لحفظها في ملف الطلب</div>
+        <div style="font-size:12px;font-weight:700;color:var(--slate);margin-bottom:8px;">📷 صور قبل العمل</div>
+        <div class="photo-grid">
+          <div class="photo-box" id="pb1"><div class="photo-icon">📷</div><div class="photo-label">قبل 1</div><input type="file" accept="image/*" onchange="loadPhoto(this,'pb1')"></div>
+          <div class="photo-box" id="pb2"><div class="photo-icon">📷</div><div class="photo-label">قبل 2</div><input type="file" accept="image/*" onchange="loadPhoto(this,'pb2')"></div>
+          <div class="photo-box" id="pb3"><div class="photo-icon">📷</div><div class="photo-label">قبل 3</div><input type="file" accept="image/*" onchange="loadPhoto(this,'pb3')"></div>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:var(--slate);margin-bottom:8px;">✨ صور بعد العمل</div>
+        <div class="photo-grid">
+          <div class="photo-box" id="pa1"><div class="photo-icon">✨</div><div class="photo-label">بعد 1</div><input type="file" accept="image/*" onchange="loadPhoto(this,'pa1')"></div>
+          <div class="photo-box" id="pa2"><div class="photo-icon">✨</div><div class="photo-label">بعد 2</div><input type="file" accept="image/*" onchange="loadPhoto(this,'pa2')"></div>
+          <div class="photo-box" id="pa3"><div class="photo-icon">✨</div><div class="photo-label">بعد 3</div><input type="file" accept="image/*" onchange="loadPhoto(this,'pa3')"></div>
+        </div>
+        <div style="background:var(--frost);border-radius:10px;padding:12px;font-size:12px;color:var(--mist);display:flex;gap:8px;align-items:center;">
+          <span>💡</span><span>الصور اختيارية ولكن تُعزز ثقة العميل وتحمي المؤسسة عند أي نزاع</span>
+        </div>
+      </div>
+
+      <!-- STEP 3: INVOICE -->
+      <div id="step3" style="display:none">
+        <div class="section-title">🧾 إصدار الفاتورة</div>
+        <div class="wo-incomplete-warn" id="woIncompleteWarn">
+          ⚠️ هذا الأمر يحتاج إكمال بيانات — يرجى إدخال السعر قبل إصدار الفاتورة.
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>سعر الخدمة (ريال) <span class="req">*</span></label><input type="number" id="w_price" placeholder="0" min="0" oninput="updateInvoice()"></div>
+          <div class="form-group"><label>تكلفة قطع الغيار (ريال)</label><input type="number" id="w_parts_cost" placeholder="0" min="0" value="0" oninput="updateInvoice()"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>خصم (ريال)</label><input type="number" id="w_discount" placeholder="0" min="0" value="0" oninput="updateInvoice()"></div>
+          <div class="form-group"><label>طريقة الدفع</label>
+            <select id="w_payment"><option value="كاش">💵 كاش</option><option value="تحويل">🏦 تحويل بنكي</option><option value="مدى">💳 مدى</option></select>
+          </div>
+        </div>
+        <div class="invoice-preview">
+          <div class="invoice-top"><h2>مؤسسة أطواد لصيانة المكيفات</h2><div class="inv-num" id="invNum">WO-00000</div></div>
+          <div class="invoice-body">
+            <div class="inv-row"><span class="label">العميل</span><span class="value" id="inv_client">—</span></div>
+            <div class="inv-row"><span class="label">الخدمة</span><span class="value" id="inv_service">—</span></div>
+            <div class="inv-row"><span class="label">عدد الوحدات</span><span class="value" id="inv_units">—</span></div>
+            <div class="inv-row"><span class="label">التاريخ</span><span class="value" id="inv_date">—</span></div>
+            <div class="inv-row"><span class="label">الفني</span><span class="value" id="inv_tech">—</span></div>
+            <div class="inv-row"><span class="label">سعر الخدمة</span><span class="value" id="inv_price">0 ريال</span></div>
+            <div class="inv-row"><span class="label">قطع الغيار</span><span class="value" id="inv_parts">0 ريال</span></div>
+            <div class="inv-row"><span class="label">خصم</span><span class="value" id="inv_discount" style="color:var(--success)">0 ريال</span></div>
+          </div>
+          <div class="inv-total"><span class="t-label">الإجمالي</span><span class="t-price" id="inv_total">0 ريال</span></div>
+        </div>
+        <div style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:10px;padding:10px 14px;font-size:12px;color:#92400E;">⚠️ الأسعار لا تشمل قطع الغيار إلا إذا مذكورة. الضمان أسبوع على أعمال التنظيف.</div>
+      </div>
+
+      <!-- STEP 4: SIGNATURE -->
+      <div id="step4" style="display:none">
+        <div class="section-title">✍️ توقيع العميل</div>
+        <div style="font-size:13px;color:var(--mist);margin-bottom:14px;">يوقّع العميل إقراراً باستلام الخدمة وموافقته على الفاتورة</div>
+        <div class="sig-wrap">
+          <div class="sig-header">
+            <span>✍️ منطقة التوقيع</span>
+            <button class="sig-clear" onclick="clearSig()">مسح</button>
+          </div>
+          <canvas id="sigCanvas" width="600" height="160"></canvas>
+        </div>
+        <div style="background:var(--frost);border-radius:10px;padding:12px;font-size:12px;color:var(--mist);">
+          بتوقيع هذا النموذج، يُقرّ العميل باستلام الخدمة المذكورة وموافقته على المبلغ المحدد في الفاتورة.
+        </div>
+      </div>
+
+      <!-- STEP 5: RATING -->
+      <div id="step5" style="display:none">
+        <div class="section-title">📋 ملاحظات داخلية وطلب التقييم</div>
+        <div style="font-size:13px;color:var(--mist);margin-bottom:14px;">يمكنك إرسال رابط التقييم للعميل عبر واتساب، أو تسجيل ملاحظة داخلية — هذه الخطوة اختيارية ولا تؤثر على إتمام أمر العمل.</div>
+
+        <!-- زر إرسال طلب التقييم -->
+        <div style="background:#D1FAE5;border:1.5px solid #6EE7B7;border-radius:12px;padding:16px;margin-bottom:16px;text-align:center;">
+          <div style="font-size:13px;font-weight:700;color:#065F46;margin-bottom:10px;">📲 أرسل رابط التقييم للعميل</div>
+          <div style="font-size:12px;color:#047857;margin-bottom:12px;">سيُفتح واتساب برسالة جاهزة — العميل يقيّم بنفسه عبر الرابط</div>
+          <button onclick="sendReviewRequestFromStep()" style="padding:11px 24px;background:#25D366;color:#fff;border:none;border-radius:10px;font-family:'Tajawal',sans-serif;font-size:14px;font-weight:800;cursor:pointer;">
+            📲 إرسال طلب التقييم عبر واتساب
+          </button>
+        </div>
+
+        <!-- ملاحظة داخلية — ليست تقييم العميل -->
+        <div class="form-group">
+          <label style="font-weight:700;color:var(--deep);">ملاحظة داخلية (اختياري)</label>
+          <div style="font-size:11px;color:var(--mist);margin-bottom:6px;">هذه الملاحظة للاستخدام الداخلي فقط — لا تُعرض كتقييم من العميل</div>
+          <textarea id="w_feedback" rows="3" placeholder="ملاحظات عن الزيارة، العميل، أو أي تفاصيل مفيدة..."></textarea>
+        </div>
+
+        <!-- تقييم داخلي اختياري — واضح أنه داخلي -->
+        <div style="margin-top:8px;">
+          <label style="font-size:13px;font-weight:700;color:var(--deep);">تقدير داخلي للزيارة (اختياري)</label>
+          <div style="font-size:11px;color:var(--mist);margin-bottom:8px;">للاستخدام الداخلي فقط — لا يمثّل تقييم العميل</div>
+          <div class="rating-stars" id="ratingStars" style="justify-content:flex-start;">
+            <span class="star" onclick="setRating(1)">☆</span>
+            <span class="star" onclick="setRating(2)">☆</span>
+            <span class="star" onclick="setRating(3)">☆</span>
+            <span class="star" onclick="setRating(4)">☆</span>
+            <span class="star" onclick="setRating(5)">☆</span>
+          </div>
+          <div id="ratingLabel" style="font-size:12px;color:var(--mist);height:18px;margin-top:4px;"></div>
+        </div>
+      </div>
+
+      <!-- SUCCESS -->
+      <div id="stepSuccess" style="display:none">
+        <div class="success-screen">
+          <div class="success-anim">✓</div>
+          <div style="font-size:22px;font-weight:800;color:var(--deep);margin-bottom:8px;">اكتملت العملية! 🎉</div>
+          <div style="font-size:14px;color:var(--mist);margin-bottom:24px;">تم حفظ أمر العمل والفاتورة وتوقيع العميل</div>
+          <div id="successWONum" style="background:var(--frost);border:2px dashed var(--sky);border-radius:12px;padding:14px;margin-bottom:20px;">
+            <div style="font-size:11px;color:var(--mist)">رقم أمر العمل</div>
+            <div style="font-size:24px;font-weight:800;color:var(--deep);letter-spacing:2px;direction:ltr;">WO-00000</div>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;">
+            <button onclick="shareWhatsapp()" style="padding:10px 14px;background:#25D366;color:#fff;border:none;border-radius:10px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">📲 إرسال الفاتورة</button>
+            <button onclick="printInvoicePDF()" style="padding:10px 14px;background:var(--deep);color:#fff;border:none;border-radius:10px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">📄 PDF</button>
+            <button onclick="sendReviewRequest()" style="padding:10px 14px;background:#F59E0B;color:#fff;border:none;border-radius:10px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">⭐ تقييم</button>
+            <button onclick="closeWOModal()" style="padding:10px 18px;background:var(--ice);color:var(--sky);border:none;border-radius:10px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">إغلاق</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer" id="woModalFooter">
+      <button class="btn-back" id="btnBack" onclick="prevStep()" style="display:none">← رجوع</button>
+      <button class="btn-next" id="btnNext" onclick="nextStep()">التالي ←</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== FIREBASE =====
+var db = null;
+try {
+  if(!firebase.apps.length) firebase.initializeApp({databaseURL:"https://atwad-booking-default-rtdb.firebaseio.com"});
+  db = firebase.database();
+} catch(e){ console.log('Firebase:',e); }
+
+function importWOFromFirebase() {
+  if(!db){ showToast('⚠️ Firebase غير متاح'); return; }
+  var btn = document.getElementById('importWOBtn');
+  btn.textContent = '⏳ جاري الاستيراد...'; btn.disabled = true;
+
+  // مفاتيح موجودة (bookings أو appointments)
+  var existRefs     = new Set(workOrders.map(function(w){ return w.firebaseRef||''; }));
+  var existApptKeys = new Set(workOrders.map(function(w){ return w.sourceApptKey||''; }));
+  var added = 0, skip = 0;
+
+  function sourceIsCancelled(item) {
+    var status = String((item && item.status) || '').trim().toLowerCase();
+    return ['cancelled','canceled','rejected','declined','ملغي','ملغى','مرفوض'].indexOf(status) !== -1;
+  }
+
+  function finish() {
+    saveData(); updateStats(); renderWOs();
+    btn.textContent = '📥 استيراد من الحجوزات'; btn.disabled = false;
+    if(added>0) showToast('✅ تم استيراد '+added+' أمر عمل جديد');
+    else showToast('ℹ️ لا أوامر جديدة — تم تخطي '+skip);
+  }
+
+  // ١. استيراد من bookings
+  db.ref('bookings').once('value', function(snapB) {
+    snapB.forEach(function(child) {
+      var b = child.val(); var key = child.key;
+      if(existRefs.has(key)){ skip++; return; }
+      if(sourceIsCancelled(b)){ skip++; return; }
+      if(!b.date) return;
+      workOrders.unshift({
+        id: 'WO-' + String(workOrders.length+1001).padStart(5,'0'),
+        firebaseRef:   key,
+        sourceApptKey: '',
+        status: 'open',
+        client:  b.client||b.name||'—',
+        phone:   (b.phone||'').replace(/[^0-9]/g,'').replace(/^966/,'0'),
+        address: b.city||'جدة', service: b.service||'تنظيف مكيف',
+        actype:  'سبليت', units: b.units||1, tech: 'Abrar',
+        date: b.date, time: (b.time||'').split(' - ')[0]||b.time||'',
+        problem: 'من نموذج الحجز الإلكتروني', parts: '',
+        price: safeInvoiceNumber(b.servicePrice||b.price||0),
+        servicePrice: safeInvoiceNumber(b.servicePrice||b.price||0),
+        partsCost: 0, discount: 0,
+        total: safeInvoiceNumber(b.servicePrice||b.price||0),
+        payment: 'كاش', rating: 0,
+        booking: {servicePrice: safeInvoiceNumber(b.servicePrice||0)},
+        createdAt: b.createdAt||new Date().toISOString()
+      });
+      existRefs.add(key); added++;
+    });
+
+    // ٢. استيراد من appointments (المواعيد التي أُنشئت مباشرة)
+    db.ref('appointments').once('value', function(snapA) {
+      snapA.forEach(function(child) {
+        var a = child.val(); var key = child.key;
+        // تخطي إذا مرتبط بـ booking موجود أو له أمر عمل بالفعل
+        if(existApptKeys.has(key)){ skip++; return; }
+        if(sourceIsCancelled(a)){ skip++; return; }
+        if(!a.date || !a.client) return;
+        workOrders.unshift({
+          id: 'WO-' + String(workOrders.length+1001).padStart(5,'0'),
+          firebaseRef:   '',
+          sourceApptKey: key,       // الربط بمفتاح الموعد
+          sourceApptSrc: 'appointments',
+          status: a.status==='done' ? 'done' : 'open',
+          client:  a.client||'—',
+          phone:   (a.phone||'').replace(/[^0-9]/g,'').replace(/^966/,'0'),
+          address: a.address||a.city||'جدة',
+          service: a.service||'—',
+          actype:  'سبليت', units: a.units||1, tech: a.tech||'',
+          date: a.date, time: (a.time||'').split(' - ')[0]||a.time||'',
+          problem: a.notes||'من صفحة المواعيد', parts: '',
+          price: safeInvoiceNumber(a.servicePrice||a.price||0),
+          servicePrice: safeInvoiceNumber(a.servicePrice||a.price||0),
+          partsCost: 0, discount: 0,
+          total: safeInvoiceNumber(a.servicePrice||a.price||0),
+          payment: 'كاش', rating: 0,
+          createdAt: a.createdAt||new Date().toISOString()
+        });
+        existApptKeys.add(key); added++;
+      });
+
+      // أيضاً: workOrders المنشأة من createMissingWO لها sourceApptKey
+      db.ref('workOrders').once('value', function(snapWO) {
+        var existFromWO = new Set();
+        snapWO.forEach(function(c){ var k=c.val().sourceApptKey; if(k) existFromWO.add(k); });
+        workOrders = workOrders.filter(function(w){
+          return !(w.sourceApptKey && existFromWO.has(w.sourceApptKey) && !w._fbKey);
+        });
+        finish();
+      }, function(){ finish(); });
+    }, function(){ finish(); });
+  }, function(){
+    btn.textContent='📥 استيراد من الحجوزات'; btn.disabled=false;
+    showToast('❌ خطأ في الاتصال');
+  });
+}
+// ===== STATE =====
+let workOrders = JSON.parse(localStorage.getItem('atwad_workorders') || '[]');
+
+// مزامنة Firebase
+function syncFromFirebase() {
+  if(!db) return;
+  document.getElementById('fbDot') && (document.getElementById('fbDot').className='fb-dot loading');
+  db.ref('workOrders').on('value', function(snap) {
+    var fbData = [];
+    snap.forEach(function(child) {
+      var v = child.val();
+      // احذف _fbKey المحفوظ داخل البيانات (من createMissingWO) لتجنب التكرار
+      var clean = Object.assign({}, v);
+      delete clean._fbKey;
+      fbData.push(Object.assign(clean, {_fbKey: child.key}));
+    });
+    // دائماً نُحدِّث من Firebase — حتى لو جاءت قائمة أقل من المحلية
+    // هذا يضمن أن أي أمر محفوظ في Firebase يظهر بعد إعادة التحميل
+    workOrders = fbData;
+    localStorage.setItem('atwad_workorders', JSON.stringify(workOrders));
+    updateStats();
+    renderWOs();
+    document.getElementById('fbDot') && (document.getElementById('fbDot').className='fb-dot connected');
+  }, function(err) {
+    console.error('[workOrders] Firebase error:', err);
+    document.getElementById('fbDot') && (document.getElementById('fbDot').className='fb-dot');
+  });
+}
+let clients = []; try { clients = JSON.parse(localStorage.getItem('atwad_clients') || '[]'); } catch {}
+let currentFilter = 'all';
+let currentStep = 1;
+let editingWO = null;
+let currentRating = 0;
+let sigCanvas, sigCtx, drawing = false;
+let lastPos = {};
+let currentWOId = null;
+
+const TECHS = { Abrar:'أحمد', 'أبرار':'أحمد', 'Abrar':'أحمد', Shoib:'شعيب', Suhail:'سهيل' };
+const RATING_LABELS = ['','ضعيف','مقبول','جيد','جيد جداً','ممتاز 🌟'];
+
+function genId(){ return 'WO-' + String(workOrders.length + 1001).padStart(5,'0'); }
+function saveData(){
+  localStorage.setItem('atwad_workorders', JSON.stringify(workOrders));
+  // حفظ في Firebase أيضاً
+  if(db) {
+    workOrders.forEach(function(wo) {
+      if(wo._fbKey) {
+        var copy = {...wo}; delete copy._fbKey;
+        db.ref('workOrders/' + wo._fbKey).set(copy);
+      } else {
+        var ref = db.ref('workOrders').push();
+        wo._fbKey = ref.key;
+        ref.set(wo);
+      }
+    });
+  }
+}
+function today(){ return new Date().toISOString().split('T')[0]; }
+function fmtDate(d){ try{ return new Date(d+'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory',{year:'numeric',month:'short',day:'numeric'}); } catch{ return d||'—'; } }
+function escapeHTML(value){
+  return String(value == null ? '' : value)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ===== STATS =====
+/** هل أمر العمل ناقص البيانات؟ */
+function isIncomplete(w) {
+  return !w.price || w.price === 0 || !w.service || !w.client || !w.phone;
+}
+
+function updateStats(){
+  var incomplete = workOrders.filter(isIncomplete);
+  document.getElementById('sAll').textContent       = workOrders.length;
+  document.getElementById('sOpen').textContent      = workOrders.filter(w=>w.status==='open').length;
+  document.getElementById('sInprog').textContent    = workOrders.filter(w=>w.status==='inprogress').length;
+  document.getElementById('sDone').textContent      = workOrders.filter(w=>w.status==='done').length;
+  document.getElementById('sInvoiced').textContent  = workOrders.filter(w=>w.status==='invoiced').length;
+  document.getElementById('sIncomplete').textContent = incomplete.length;
+  // تلوين بطاقة الناقصة
+  document.querySelector('.stat-card.incomplete').style.borderColor = incomplete.length ? '#F59E0B' : '#E2E8F0';
+}
+
+/** عرض/إخفاء تقرير الأوامر الناقصة */
+function toggleIncompleteReport() {
+  var report = document.getElementById('incompleteReport');
+  var list   = document.getElementById('incompleteList');
+  var isOpen = report.classList.contains('show');
+  if(isOpen) { report.classList.remove('show'); return; }
+
+  var incomplete = workOrders.filter(isIncomplete);
+  if(!incomplete.length) {
+    showToast('✅ لا توجد أوامر بيانات ناقصة');
+    return;
+  }
+
+  list.innerHTML = incomplete.map(function(w) {
+    var missing = [];
+    if(!w.client || !w.phone) missing.push('بيانات العميل');
+    if(!w.service) missing.push('نوع الخدمة');
+    if(!w.price || w.price === 0) missing.push('سعر الخدمة');
+    return '<div class="incomplete-row">' +
+      '<div><strong>' + escapeHTML(w.id) + '</strong> — ' + escapeHTML(w.client||'بدون اسم') + '<br>' +
+      '<span style="color:var(--mist);font-size:11px;">ناقص: ' + missing.join('، ') + '</span></div>' +
+      '<button class="fix-btn" onclick="openWODetail(\'' + w.id + '\');toggleIncompleteReport()">📝 إكمال</button>' +
+      '</div>';
+  }).join('');
+
+  report.classList.add('show');
+}
+
+// ===== FILTER =====
+function setFilter(f, btn){
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  renderWOs();
+}
+
+// ===== RENDER =====
+function renderWOs(search=''){
+  let list = [...workOrders];
+  if(currentFilter !== 'all') list = list.filter(w=>w.status===currentFilter);
+  if(search) list = list.filter(function(w){
+    var s = search.toLowerCase();
+    return (w.client||'').toLowerCase().includes(s)
+        || (w.id||'').includes(s)
+        || (w.phone||'').includes(search);
+  });
+  list.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+
+  const sMap = { open:'ws-open', inprogress:'ws-inprogress', done:'ws-done', invoiced:'ws-invoiced' };
+  const sLabel = { open:'مفتوح', inprogress:'قيد التنفيذ', done:'مكتمل', invoiced:'فاتورة صادرة' };
+
+  if(list.length === 0){
+    document.getElementById('woGrid').innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--mist);"><div style="font-size:48px;margin-bottom:12px;">🔧</div><p>لا توجد أوامر عمل بعد<br><small>اضغط "+ أمر عمل جديد" للبدء</small></p></div>`;
+    return;
+  }
+
+  document.getElementById('woGrid').innerHTML = list.map(w=>{
+    var incomplete = isIncomplete(w);
+    return `
+      <div class="wo-card s-${w.status||'open'}" onclick="openWODetail('${w.id}')">
+      ${incomplete ? '<span class="incomplete-badge">⚠️ ناقص</span>' : ''}
+      <div class="wo-header">
+        <span class="wo-id">${escapeHTML(w.id)}</span>
+        <span class="wo-status ${sMap[w.status||'open']}">${sLabel[w.status||'open']}</span>
+      </div>
+      <div class="wo-client">${escapeHTML(w.client||'—')}</div>
+      <div class="wo-service">🛠️ ${escapeHTML(w.service||'—')} · ${escapeHTML(w.units||1)} وحدة · ${escapeHTML(TECHS[w.tech]||w.tech||'—')}</div>
+      <div class="wo-meta">
+        <span>📅 ${escapeHTML(fmtDate(w.date))}</span>
+        <span>📍 ${escapeHTML((w.address||'').substring(0,20)||'—')}</span>
+        ${w.rating?`<span>⭐ ${w.rating}/5</span>`:''}
+      </div>
+      <div class="wo-footer">
+        <div class="wo-price">${w.total||0} ريال</div>
+        <div class="wo-actions" onclick="event.stopPropagation()">
+          ${w.status==='open'?`<button class="wa-btn wa-open" onclick="quickStatus('${w.id}','inprogress')">⚡ بدء</button>`:''}
+          ${w.status==='inprogress'?`<button class="wa-btn wa-done" onclick="quickStatus('${w.id}','done')">✓ إتمام</button>`:''}
+          ${w.status==='done'?`<button class="wa-btn wa-invoice" onclick="quickStatus('${w.id}','invoiced')">🧾 فاتورة</button>`:''}
+          <button class="wa-btn wa-open" onclick="openWODetail('${w.id}')">عرض</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function quickStatus(id, status){
+  const idx = workOrders.findIndex(w=>w.id===id);
+  if(idx>-1){ workOrders[idx].status=status; saveData(); updateStats(); renderWOs(); showToast('✅ تم تحديث الحالة'); }
+}
+
+// ===== NEW WO WIZARD =====
+function openNewWO(){
+  editingWO = null; currentStep = 1; currentRating = 0; currentWOId = null;
+  document.getElementById('woModalTitle').textContent = '🔧 أمر عمل جديد';
+  ['w_client','w_phone','w_address','w_problem','w_parts','w_feedback'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('w_service').value='';
+  document.getElementById('w_actype').value='';
+  document.getElementById('w_tech').value='';
+  document.getElementById('w_units').value='1';
+  document.getElementById('w_date').value=today();
+  document.getElementById('w_time').value='09:00';
+  document.getElementById('w_price').value='';
+  document.getElementById('w_parts_cost').value='0';
+  document.getElementById('w_discount').value='0';
+  document.getElementById('w_payment').value='كاش';
+  ['pb1','pb2','pb3','pa1','pa2','pa3'].forEach(id=>{ const b=document.getElementById(id); if(b){ const imgs=b.querySelectorAll('img'); imgs.forEach(i=>i.remove()); }});
+  document.querySelectorAll('.star').forEach(s=>s.classList.remove('active'));
+  document.getElementById('ratingLabel').textContent='';
+  populateClients();
+  showStep(1);
+  document.getElementById('woModal').classList.add('open');
+}
+
+function openWODetail(id){
+  const w = workOrders.find(x=>x.id===id);
+  if(!w) return;
+  console.log('بيانات أمر العمل المفتوح:', w);
+  editingWO = id;
+  document.getElementById('woModalTitle').textContent = '📋 ' + w.id;
+  document.getElementById('w_client').value  = w.client  || '';
+  document.getElementById('w_phone').value   = w.phone   || '';
+  document.getElementById('w_address').value = w.address || '';
+  document.getElementById('w_service').value = w.service || '';
+  document.getElementById('w_actype').value  = w.actype  || '';
+  document.getElementById('w_tech').value    = w.tech    || '';
+  document.getElementById('w_units').value   = w.units   || 1;
+  document.getElementById('w_date').value    = w.date    || today();
+  document.getElementById('w_time').value    = w.time    || '09:00';
+  document.getElementById('w_problem').value = w.problem || '';
+  document.getElementById('w_parts').value   = w.parts   || '';
+  document.getElementById('w_payment').value = w.payment || 'كاش';
+
+  // الأسعار مباشرة من السجل
+  setNumericInputValue('w_price',      w.price    || 0);
+  setNumericInputValue('w_parts_cost', w.partsCost|| 0);
+  setNumericInputValue('w_discount',   w.discount || 0);
+
+  currentWOId = id;
+  populateClients();
+
+  // ملء معاينة الفاتورة مباشرة من البيانات (لا نعتمد على w_service.value)
+  var invNum = document.getElementById('invNum');
+  if(invNum) invNum.textContent = w.id || 'WO-00000';
+  var invClient  = document.getElementById('inv_client');
+  var invService = document.getElementById('inv_service');
+  var invDate    = document.getElementById('inv_date');
+  var invTech    = document.getElementById('inv_tech');
+  var invUnits   = document.getElementById('inv_units');
+  if(invClient)  invClient.textContent  = w.client  || '—';
+  if(invService) invService.textContent = w.service || getInvoiceServiceName(w);
+  if(invDate)    invDate.textContent    = fmtDate(w.date);
+  if(invTech)    invTech.textContent    = TECHS[w.tech] || w.tech || '—';
+  if(invUnits)   invUnits.textContent   = (w.units || 1) + ' وحدة';
+
+  showStep(3);
+  updateInvoice();
+
+  // تنبيه البيانات الناقصة
+  var warnEl = document.getElementById('woIncompleteWarn');
+  if(warnEl) warnEl.classList.toggle('show', isIncomplete(w));
+
+  document.getElementById('woModal').classList.add('open');
+}
+
+function closeWOModal(){ document.getElementById('woModal').classList.remove('open'); }
+
+// ===== STEPS =====
+function showStep(n){
+  currentStep = n;
+  for(let i=1;i<=5;i++){
+    document.getElementById('step'+i).style.display = i===n?'block':'none';
+    document.getElementById('sp'+i).className = 'sp-step' + (i<n?' done':i===n?' active':'');
+    if(i<5) document.getElementById('sl'+i).className = 'sp-line' + (i<n?' done':'');
+  }
+  document.getElementById('stepSuccess').style.display = 'none';
+  document.getElementById('stepsBar').style.display = n<=5?'flex':'none';
+  document.getElementById('woModalFooter').style.display = n<=5?'flex':'none';
+  document.getElementById('btnBack').style.display = n>1?'inline-block':'none';
+  document.getElementById('btnNext').textContent = n===4?'إتمام وحفظ ←' : n===5?'✅ تسليم وإغلاق أمر العمل' : 'التالي ←';
+  if(n===3) updateInvoice();
+  if(n===4) initSig();
+}
+
+function nextStep(){
+  if(currentStep===1){
+    if(!document.getElementById('w_client').value.trim()) return showToast('❌ أدخل اسم العميل');
+    if(!document.getElementById('w_phone').value.trim()) return showToast('❌ أدخل رقم الجوال');
+    if(!document.getElementById('w_service').value) return showToast('❌ اختر نوع الخدمة');
+    if(!document.getElementById('w_tech').value) return showToast('❌ اختر الفني');
+    if(currentStep<5){ showStep(currentStep+1); return; }
+  }
+  if(currentStep===2){ showStep(3); return; }
+  if(currentStep===3){
+    if(!document.getElementById('w_price').value) return showToast('❌ أدخل سعر الخدمة');
+    showStep(4); return;
+  }
+  if(currentStep===4){ saveWO(); showStep(5); return; }
+  if(currentStep===5){ finalizeWO(); return; }
+}
+
+function prevStep(){ if(currentStep>1) showStep(currentStep-1); }
+
+function saveWO(){
+  const price = parseFloat(document.getElementById('w_price').value)||0;
+  const parts = parseFloat(document.getElementById('w_parts_cost').value)||0;
+  const disc = parseFloat(document.getElementById('w_discount').value)||0;
+  const total = Math.max(0, price + parts - disc);
+  const id = editingWO || genId();
+  currentWOId = id;
+  const data = {
+    id, status: editingWO ? (workOrders.find(w=>w.id===editingWO)?.status||'open') : 'inprogress',
+    client: document.getElementById('w_client').value.trim(),
+    phone: document.getElementById('w_phone').value.trim(),
+    address: document.getElementById('w_address').value.trim(),
+    service: document.getElementById('w_service').value,
+    actype: document.getElementById('w_actype').value,
+    units: parseInt(document.getElementById('w_units').value)||1,
+    tech: document.getElementById('w_tech').value,
+    date: document.getElementById('w_date').value,
+    time: document.getElementById('w_time').value,
+    problem: document.getElementById('w_problem').value.trim(),
+    parts: document.getElementById('w_parts').value.trim(),
+    price, partsCost: parts, discount: disc, total,
+    payment: document.getElementById('w_payment').value,
+    sig: getSigData(),
+    createdAt: new Date().toISOString()
+  };
+  if(editingWO){
+    const idx = workOrders.findIndex(w=>w.id===editingWO);
+    workOrders[idx] = {...workOrders[idx],...data};
+  } else {
+    workOrders.unshift(data);
+  }
+  document.getElementById('successWONum').querySelector('div:last-child').textContent = id;
+  document.getElementById('invNum').textContent = id;
+  saveData(); updateStats(); renderWOs();
+}
+
+function finalizeWO(){
+  const idx = workOrders.findIndex(w=>w.id===currentWOId);
+  if(idx>-1){
+    workOrders[idx].status = 'invoiced';
+    workOrders[idx].rating = currentRating;
+    workOrders[idx].feedback = document.getElementById('w_feedback').value.trim();
+    saveData(); updateStats(); renderWOs();
+  }
+  for(let i=1;i<=5;i++) document.getElementById('step'+i).style.display='none';
+  document.getElementById('stepSuccess').style.display='block';
+  document.getElementById('stepsBar').style.display='none';
+  document.getElementById('woModalFooter').style.display='none';
+  showToast('🎉 تم إتمام أمر العمل بنجاح!');
+}
+
+// ===== INVOICE =====
+// ============================================================
+// دوال مساعدة لبيانات الفاتورة
+// مصدر: الكود المُرسل — مُكيَّف مع IDs الموجودة في الصفحة
+// ============================================================
+
+/** قراءة أول قيمة موجودة وغير فارغة من object */
+function getFirstValue(obj, keys, fallback) {
+  if(fallback === undefined) fallback = '';
+  if(!obj || typeof obj !== 'object') return fallback;
+  for(var i = 0; i < keys.length; i++) {
+    var v = obj[keys[i]];
+    if(v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  return fallback;
+}
+
+/** تحويل قيمة إلى رقم آمن */
+function safeInvoiceNumber(value) {
+  var n = Number(String(value || '').replace(/[^\d.-]/g,'').trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** تعيين قيمة رقمية في حقل إدخال بأمان */
+function setNumericInputValue(elementId, value) {
+  var element = document.getElementById(elementId);
+  if(!element) return;
+  element.value = safeInvoiceNumber(value);
+}
+
+/** تنسيق مبلغ بالأرقام العربية */
+function formatInvoiceMoney(value) {
+  var n = safeInvoiceNumber(value);
+  return new Intl.NumberFormat('ar-SA', {maximumFractionDigits:2}).format(n);
+}
+
+/** تطبيع رقم أمر العمل */
+function normalizeWorkOrderNumber(value, fallbackId) {
+  var s = String(value || '').trim();
+  if(s && s !== 'WO-00000') {
+    if(/^\d+$/.test(s)) return 'WO-' + s.padStart(5,'0');
+    return s;
+  }
+  var src = String(fallbackId || '');
+  var digits = src.match(/\d+/g);
+  if(digits && digits.length) {
+    return 'WO-' + digits.join('').slice(-5).padStart(5,'0');
+  }
+  return 'WO-00000';
+}
+
+/** استخراج اسم العميل من سجل */
+function getInvoiceCustomerName(appt) {
+  return getFirstValue(appt, ['customerName','clientName','customer','client','name'], '—');
+}
+
+/** استخراج اسم الخدمة من سجل — نسخة موسّعة */
+function getInvoiceServiceName(wo) {
+  if(!wo || typeof wo !== 'object') return '—';
+
+  // الحقول المباشرة بالأولوية
+  var possibleValues = [
+    wo.service, wo.serviceName, wo.serviceType, wo.serviceTitle,
+    wo.workType, wo.jobType, wo.maintenanceType, wo.requestType,
+    wo.category, wo.description, wo.details, wo.notes
+  ];
+  for(var i = 0; i < possibleValues.length; i++) {
+    var v = possibleValues[i];
+    if(v !== undefined && v !== null && String(v).trim() !== '')
+      return String(v).trim();
+  }
+
+  // مصفوفة services
+  if(Array.isArray(wo.services) && wo.services.length) {
+    var names = wo.services.map(function(item) {
+      if(typeof item === 'string') return item.trim();
+      if(item && typeof item === 'object')
+        return String(item.name || item.title || item.service ||
+                      item.serviceName || item.type || '').trim();
+      return '';
+    }).filter(Boolean);
+    if(names.length) return names.join('، ');
+  }
+
+  // بيانات مُدمجة من حجوزات مستوردة
+  var nested = [wo.booking, wo.appointment, wo.request, wo.customerRequest];
+  for(var j = 0; j < nested.length; j++) {
+    var n = nested[j];
+    if(!n || typeof n !== 'object') continue;
+    var ns = n.service || n.serviceName || n.serviceType ||
+             n.workType || n.requestType;
+    if(ns !== undefined && ns !== null && String(ns).trim() !== '')
+      return String(ns).trim();
+  }
+
+  return '—';
+}
+
+/** استخراج اسم الفني من سجل */
+function getInvoiceTechName(appt) {
+  var techKey = getFirstValue(appt, ['tech','technician','technicianName','الفني'], '');
+  return TECHS[techKey] || techKey || '—';
+}
+
+/** تنسيق تاريخ من أي صيغة */
+function getInvoiceDate(appt) {
+  var raw = getFirstValue(appt, ['appointmentDate','date','scheduledDate','serviceDate','createdAt'], '');
+  if(!raw) return '—';
+  try {
+    var d = new Date(raw);
+    if(isNaN(d.getTime())) return String(raw);
+    return new Intl.DateTimeFormat('ar-SA-u-ca-gregory', {day:'numeric',month:'long',year:'numeric'}).format(d);
+  } catch(e) { return String(raw); }
+}
+
+/**
+ * updateInvoice — يقرأ من حقول الإدخال الفعلية ويحدّث spans العرض
+ *
+ * حقول الإدخال (input type="number"):
+ *   w_price / w_parts_cost / w_discount
+ *
+ * spans العرض في معاينة الفاتورة:
+ *   inv_price / inv_parts / inv_discount / inv_total
+ *   inv_client / inv_service / inv_units / inv_date / inv_tech
+ *
+ * ملاحظة: inv_price_text / inv_parts_text / inv_discount_text
+ *   غير موجودة في HTML الحالي — تُستخدم IDs الفعلية بدلاً منها
+ */
+function updateInvoice() {
+  var servicePrice = safeInvoiceNumber(document.getElementById('w_price')     ? document.getElementById('w_price').value     : 0);
+  var partsCost    = safeInvoiceNumber(document.getElementById('w_parts_cost') ? document.getElementById('w_parts_cost').value : 0);
+  var discount     = safeInvoiceNumber(document.getElementById('w_discount')   ? document.getElementById('w_discount').value   : 0);
+  var total        = Math.max(0, servicePrice + partsCost - discount);
+
+  // بيانات نصية من حقول النموذج
+  var clientEl  = document.getElementById('inv_client');
+  var serviceEl = document.getElementById('inv_service');
+  var unitsEl   = document.getElementById('inv_units');
+  var dateEl    = document.getElementById('inv_date');
+  var techEl    = document.getElementById('inv_tech');
+  if(clientEl)  clientEl.textContent  = (document.getElementById('w_client')  ? document.getElementById('w_client').value  : '') || '—';
+  var serviceVal = document.getElementById('w_service') ? document.getElementById('w_service').value : '';
+  // إذا كانت قيمة الـ select فارغة (قيمة غير موجودة في الخيارات)
+  // احتفظ بما هو مكتوب في inv_service من loadInvoiceData
+  if(serviceEl) {
+    if(serviceVal) serviceEl.textContent = serviceVal;
+    // إذا لم توجد قيمة صالحة في الـ select، لا تمسح ما كُتب مسبقاً
+  }
+  if(unitsEl)   unitsEl.textContent   = (safeInvoiceNumber(document.getElementById('w_units') ? document.getElementById('w_units').value : 1) || 1) + ' وحدة';
+  if(dateEl)    dateEl.textContent    = fmtDate(document.getElementById('w_date') ? document.getElementById('w_date').value : '');
+  if(techEl) {
+    var techKey = document.getElementById('w_tech') ? document.getElementById('w_tech').value : '';
+    techEl.textContent = TECHS[techKey] || techKey || '—';
+  }
+
+  // spans الأسعار — تنسيق مقروء
+  var priceEl    = document.getElementById('inv_price');
+  var partsEl    = document.getElementById('inv_parts');
+  var discountEl = document.getElementById('inv_discount');
+  var totalEl    = document.getElementById('inv_total');
+  if(priceEl)    priceEl.textContent    = formatInvoiceMoney(servicePrice) + ' ريال';
+  if(partsEl)    partsEl.textContent    = formatInvoiceMoney(partsCost)    + ' ريال';
+  if(discountEl) discountEl.textContent = '- ' + formatInvoiceMoney(discount) + ' ريال';
+  if(totalEl)    totalEl.textContent    = formatInvoiceMoney(total)        + ' ريال';
+
+  return {servicePrice: servicePrice, partsCost: partsCost, discount: discount, total: total};
+}
+
+/**
+ * loadInvoiceData — تحميل بيانات أمر العمل في نموذج الفاتورة
+ *
+ * حقول الإدخال (input type="number"):
+ *   w_price / w_parts_cost / w_discount / w_payment
+ *   → تحتاج قيمة رقمية خالصة (0, 250) — لا تنسيق عربي
+ *
+ * حقول العرض (span.value):
+ *   invNum / inv_client / inv_service / inv_date / inv_units / inv_tech
+ *   → نص مقروء
+ *
+ * ملاحظة: inv_price / inv_parts / inv_discount / inv_total
+ *   هي عرض فقط وتُحدَّث تلقائياً عبر updateInvoice()
+ */
+function loadInvoiceData(wo) {
+  if(!wo) return;
+
+  var invoice = wo.invoice || wo.invoiceData || {};
+
+  // رقم أمر العمل
+  var woNum = normalizeWorkOrderNumber(
+    wo.workOrderNumber || wo.workOrder || wo.woNumber || wo.number || wo.id,
+    wo.id
+  );
+  var numEl = document.getElementById('invNum');
+  if(numEl) numEl.textContent = woNum;
+
+  // بيانات نصية في معاينة الفاتورة
+  var clientEl  = document.getElementById('inv_client');
+  var serviceEl = document.getElementById('inv_service');
+  var dateEl    = document.getElementById('inv_date');
+  if(clientEl)  clientEl.textContent  = getInvoiceCustomerName(wo);
+  if(serviceEl) serviceEl.textContent = getInvoiceServiceName(wo);
+  if(dateEl)    dateEl.textContent    = getInvoiceDate(wo);
+
+  // الأسعار — بحث بالأولوية: invoice → servicePrice → booking → appointment → price
+  var price = safeInvoiceNumber(
+    (invoice.servicePrice !== undefined) ? invoice.servicePrice :
+    (wo.servicePrice      !== undefined) ? wo.servicePrice      :
+    (wo.booking && wo.booking.servicePrice !== undefined) ? wo.booking.servicePrice :
+    (wo.appointment && wo.appointment.servicePrice !== undefined) ? wo.appointment.servicePrice :
+    (invoice.price !== undefined) ? invoice.price :
+    (wo.price      !== undefined) ? wo.price      : 0
+  );
+  var parts = safeInvoiceNumber(
+    invoice.partsCost      !== undefined ? invoice.partsCost      :
+    invoice.spareParts     !== undefined ? invoice.spareParts     :
+    invoice.sparePartsCost !== undefined ? invoice.sparePartsCost :
+    wo.partsCost           !== undefined ? wo.partsCost           :
+    wo.spareParts          !== undefined ? wo.spareParts          : 0
+  );
+  var disc = safeInvoiceNumber(
+    invoice.discount !== undefined ? invoice.discount :
+    wo.discount      !== undefined ? wo.discount      : 0
+  );
+
+  // حقول الإدخال الفعلية في النموذج
+  setNumericInputValue('w_price',      price);
+  setNumericInputValue('w_parts_cost', parts);
+  setNumericInputValue('w_discount',   disc);
+
+  // طريقة الدفع
+  var payEl = document.getElementById('w_payment');
+  if(payEl) {
+    payEl.value = invoice.paymentMethod || wo.paymentMethod || wo.payment || 'كاش';
+  }
+
+  // تحديث معاينة الفاتورة (inv_price / inv_parts / inv_discount / inv_total)
+  updateInvoice();
+}
+
+// ===== SIGNATURE =====
+function initSig(){
+  sigCanvas = document.getElementById('sigCanvas');
+  sigCtx = sigCanvas.getContext('2d');
+  sigCtx.strokeStyle = '#0C3B5E';
+  sigCtx.lineWidth = 2.5;
+  sigCtx.lineCap = 'round';
+  sigCanvas.onmousedown = e=>{ drawing=true; lastPos=getPos(e,sigCanvas); };
+  sigCanvas.onmousemove = e=>{ if(!drawing) return; draw(getPos(e,sigCanvas)); };
+  sigCanvas.onmouseup = sigCanvas.onmouseleave = ()=>{ drawing=false; };
+  sigCanvas.ontouchstart = e=>{ e.preventDefault(); drawing=true; lastPos=getPos(e.touches[0],sigCanvas); };
+  sigCanvas.ontouchmove = e=>{ e.preventDefault(); if(!drawing) return; draw(getPos(e.touches[0],sigCanvas)); };
+  sigCanvas.ontouchend = ()=>{ drawing=false; };
+}
+function getPos(e,c){ const r=c.getBoundingClientRect(); return {x:(e.clientX-r.left)*(c.width/r.width),y:(e.clientY-r.top)*(c.height/r.height)}; }
+function draw(pos){ sigCtx.beginPath(); sigCtx.moveTo(lastPos.x,lastPos.y); sigCtx.lineTo(pos.x,pos.y); sigCtx.stroke(); lastPos=pos; }
+function clearSig(){ if(sigCtx) sigCtx.clearRect(0,0,sigCanvas.width,sigCanvas.height); }
+function getSigData(){ try{ return sigCanvas?sigCanvas.toDataURL():''; } catch{ return ''; } }
+
+// ===== PHOTOS =====
+function loadPhoto(input,boxId){
+  if(!input.files[0]) return;
+  const box = document.getElementById(boxId);
+  const reader = new FileReader();
+  reader.onload = e=>{ box.querySelectorAll('img').forEach(i=>i.remove()); const img=document.createElement('img'); img.src=e.target.result; img.style.cssText='width:100%;height:100%;object-fit:cover;position:absolute;inset:0;border-radius:10px;'; box.appendChild(img); };
+  reader.readAsDataURL(input.files[0]);
+}
+
+// ===== RATING (داخلي فقط) =====
+function setRating(n){
+  currentRating = n;
+  document.querySelectorAll('.star').forEach(function(s,i){
+    s.textContent = i < n ? '⭐' : '☆';
+    s.classList.toggle('active', i < n);
+  });
+  document.getElementById('ratingLabel').textContent = n ? (RATING_LABELS[n] || '') : '';
+}
+
+// ===== CLIENTS DATALIST =====
+function populateClients(){
+  const dl = document.getElementById('wClientList');
+  dl.innerHTML = clients.map(c=>`<option value="${c.name}">`).join('');
+  document.getElementById('w_client').addEventListener('input', function(){
+    const c = clients.find(x=>x.name===this.value);
+    if(c){ document.getElementById('w_phone').value=c.phone||''; document.getElementById('w_address').value=c.address||''; }
+  });
+}
+
+// ===== SHARE =====
+function shareWhatsapp(){
+  const w = workOrders.find(x=>x.id===currentWOId);
+  if(!w) return;
+  const msg = encodeURIComponent(`فاتورة مؤسسة أطواد لصيانة المكيفات\n${'─'.repeat(25)}\nرقم الأمر: ${w.id}\nالعميل: ${w.client}\nالخدمة: ${w.service} (${w.units} وحدة)\nالفني: ${TECHS[w.tech]||w.tech}\nالتاريخ: ${fmtDate(w.date)}\n${'─'.repeat(25)}\nالإجمالي: ${w.total} ريال\nطريقة الدفع: ${w.payment}\n${'─'.repeat(25)}\nشكراً لثقتكم 🙏`);
+  window.open(`https://wa.me/966${(w.phone||'').replace(/^0/,'')}?text=${msg}`,'_blank');
+}
+
+// ===== TOAST =====
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2800); }
+
+updateStats();
+renderWOs();
+syncFromFirebase();
+</script>
+
+
+<script>
+var LANG = localStorage.getItem('atwad_lang') || 'ar';
+
+var NAV_TEXT = {
+  ar: {clients:'العملاء', appts:'المواعيد', wo:'أوامر العمل', finance:'الإدارة المالية', reports:'التقارير', settings:'الإعدادات', brand:'أطواد', brandSub:'لصيانة المكيفات'},
+  en: {clients:'Clients', appts:'Appointments', wo:'Work Orders', finance:'Finance', reports:'Reports', settings:'Settings', brand:'Atwad', brandSub:'AC Maintenance'}
+};
+
+function applySharedLang() {
+  var l = LANG;
+  document.documentElement.lang = l;
+  document.documentElement.dir = l==='ar'?'rtl':'ltr';
+  var btn = document.getElementById('langBtn');
+  if(btn) btn.textContent = l==='ar'?'🌐 EN':'🌐 عر';
+  // Sidebar
+  var t = NAV_TEXT[l];
+  setTxt('nav-brand', t.brand);
+  setTxt('nav-brandsub', t.brandSub);
+  setTxt('nav-clients', t.clients);
+  setTxt('nav-appts', t.appts);
+  setTxt('nav-wo', t.wo);
+  setTxt('nav-finance', t.finance);
+  setTxt('nav-reports', t.reports);
+  setTxt('nav-settings', t.settings);
+  // page specific
+  if(typeof applyPageLang === 'function') applyPageLang(l);
+}
+
+function setTxt(id, txt) { var el=document.getElementById(id); if(el) el.textContent=txt; }
+function setHTML(id, txt) { var el=document.getElementById(id); if(el) el.innerHTML=txt; }
+function setPlh(id, txt) { var el=document.getElementById(id); if(el) el.placeholder=txt; }
+
+function toggleLang() {
+  LANG = LANG==='ar'?'en':'ar';
+  localStorage.setItem('atwad_lang', LANG);
+  applySharedLang();
+}
+
+document.addEventListener('DOMContentLoaded', applySharedLang);
+
+
+// ===== ?? طباعة الفاتورة PDF =====
+function printInvoicePDF() {
+  var invEl = document.querySelector('.invoice-preview');
+  if(!invEl) { showToast('❌ لا توجد فاتورة'); return; }
+  var printWin = window.open('','_blank');
+  printWin.document.write('<html dir="rtl"><head><meta charset="UTF-8">');
+  printWin.document.write('<title>فاتورة أطواد</title>');
+  printWin.document.write('<style>');
+  printWin.document.write('body{font-family:Tajawal,Arial,sans-serif;margin:20px;direction:rtl;}');
+  printWin.document.write('.invoice-top{background:#0C3B5E;color:#fff;padding:16px;border-radius:8px 8px 0 0;}');
+  printWin.document.write('.invoice-top h2{margin:0;font-size:18px;}');
+  printWin.document.write('.invoice-body{border:1px solid #E2E8F0;padding:16px;border-radius:0 0 8px 8px;}');
+  printWin.document.write('.inv-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed #E2E8F0;}');
+  printWin.document.write('.inv-total{background:#0C3B5E;color:#fff;padding:12px;border-radius:8px;margin-top:12px;display:flex;justify-content:space-between;font-size:18px;font-weight:800;}');
+  printWin.document.write('@media print{button{display:none!important;}}');
+  printWin.document.write('</style></head><body>');
+  printWin.document.write(invEl.outerHTML);
+  printWin.document.write('<br><button onclick="window.print()" style="padding:10px 20px;background:#0C3B5E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">طباعة / حفظ PDF</button>');
+  printWin.document.write('</body></html>');
+  printWin.document.close();
+  setTimeout(function(){ printWin.print(); }, 500);
+}
+
+// ===== ⭐ طلب تقييم العميل — رابط صفحة التقييم =====
+function buildReviewWAMsg(wo) {
+  // صفحة التقييم لا تدعم حالياً URL params — نُضمّن رقم الأمر في الرسالة
+  var name   = (wo.client || 'عميلنا العزيز').trim();
+  var woId   = wo.id || '';
+  var service= wo.service || 'الصيانة';
+  return 'السلام عليكم ' +
+    (name === 'عميلنا العزيز' ? name : 'أستاذ/ة ' + name) + '،\n\n' +
+    'نشكرك لاختيار مؤسسة أطواد لصيانة المكيفات.\n' +
+    'يسعدنا تقييم تجربتك معنا في ' + service + ' من خلال الرابط التالي:\n\n' +
+    '⭐ رابط التقييم:\n' +
+    'https://attwadac-sys.github.io/atwad/atwad-reviews.html\n\n' +
+    (woId ? 'رقم أمر العمل للرجوع إليه: ' + woId + '\n\n' : '') +
+    'رأيك يهمنا ويساعدنا على تطوير جودة خدماتنا.\n\n' +
+    'مؤسسة أطواد لصيانة المكيفات ❄️';
+}
+
+function normPhoneForWA(phone) {
+  if(!phone) return '';
+  // WhatsApp links accept ASCII digits only. Firebase may contain Arabic or
+  // Persian numerals when the number was entered from an Arabic keyboard.
+  var p = String(phone)
+    .replace(/[\u0660-\u0669]/g, function(d) { return String(d.charCodeAt(0) - 0x0660); })
+    .replace(/[\u06F0-\u06F9]/g, function(d) { return String(d.charCodeAt(0) - 0x06F0); })
+    .replace(/\D/g, '');
+
+  if(p.startsWith('00966')) p = p.slice(2);
+  if(p.startsWith('9660')) p = '966' + p.slice(4);
+  else if(p.startsWith('05')) p = '966' + p.slice(1);
+  else if(p.startsWith('5') && p.length === 9) p = '966' + p;
+
+  // Saudi mobile format required by wa.me: 9665XXXXXXXX
+  return /^9665\d{8}$/.test(p) ? p : '';
+}
+
+function firstCustomerPhone(obj) {
+  if(!obj) return '';
+  return obj.phone || obj.clientPhone || obj.customerPhone || obj.mobile || obj.phoneNumber || '';
+}
+
+function persistResolvedWOPhone(wo, phone) {
+  if(!wo || !phone) return;
+  wo.phone = String(phone).trim();
+  localStorage.setItem('atwad_workorders', JSON.stringify(workOrders));
+  if(db && wo._fbKey) {
+    db.ref('workOrders/' + wo._fbKey + '/phone').set(wo.phone).catch(function(err) {
+      console.warn('[Review WhatsApp] could not persist resolved phone:', err);
+    });
+  }
+}
+
+// يستعيد رقم العميل من أمر العمل أو السجل المرتبط دون تغيير بنية Firebase.
+function resolveWOPhone(wo) {
+  var directPhone = firstCustomerPhone(wo);
+  if(directPhone) return Promise.resolve(directPhone);
+
+  var localClient = clients.find(function(c) {
+    return c && wo.client && (c.name === wo.client || c.client === wo.client);
+  });
+  var localPhone = firstCustomerPhone(localClient);
+  if(localPhone) return Promise.resolve(localPhone);
+  if(!db) return Promise.resolve('');
+
+  var paths = [];
+  function addPath(path) { if(path && paths.indexOf(path) === -1) paths.push(path); }
+
+  if(wo.firebaseRef) addPath('bookings/' + wo.firebaseRef);
+  if(wo.sourceApptKey) {
+    if(wo.sourceApptSrc === 'bookings') addPath('bookings/' + wo.sourceApptKey);
+    else if(wo.sourceApptSrc === 'appointments') addPath('appointments/' + wo.sourceApptKey);
+    else {
+      addPath('appointments/' + wo.sourceApptKey);
+      addPath('bookings/' + wo.sourceApptKey);
+    }
+  }
+  if(wo.clientId) addPath('clients/' + wo.clientId);
+  if(wo.customerId) addPath('clients/' + wo.customerId);
+
+  function tryLinkedPath(index) {
+    if(index >= paths.length) return Promise.resolve('');
+    return db.ref(paths[index]).once('value').then(function(snap) {
+      var phone = firstCustomerPhone(snap.val());
+      return phone || tryLinkedPath(index + 1);
+    }).catch(function() {
+      return tryLinkedPath(index + 1);
+    });
+  }
+
+  return tryLinkedPath(0).then(function(phone) {
+    if(phone || !wo.client) return phone;
+    return db.ref('clients').orderByChild('name').equalTo(wo.client).once('value').then(function(snap) {
+      var found = '';
+      snap.forEach(function(child) {
+        if(!found) found = firstCustomerPhone(child.val());
+      });
+      return found;
+    }).catch(function() { return ''; });
+  });
+}
+
+function openReviewWhatsApp(wo, rawPhone, pendingWindow) {
+  var normalizedPhone = normPhoneForWA(rawPhone);
+  if(!normalizedPhone) {
+    if(pendingWindow && !pendingWindow.closed) pendingWindow.close();
+    showToast('❌ رقم جوال العميل غير صالح');
+    return;
+  }
+  persistResolvedWOPhone(wo, rawPhone);
+
+  var message     = buildReviewWAMsg(wo);
+  var whatsappUrl = 'https://wa.me/' + normalizedPhone + '?text=' + encodeURIComponent(message);
+  if(pendingWindow && !pendingWindow.closed) {
+    pendingWindow.location.href = whatsappUrl;
+    showToast('📲 تم فتح واتساب — راجع الرسالة وأرسلها يدوياً');
+    return;
+  }
+  var a = document.createElement('a');
+  a.href = whatsappUrl;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast('📲 تم فتح واتساب — راجع الرسالة وأرسلها يدوياً');
+}
+
+// يُستدعى من زر step5 الجديد
+function sendReviewRequestFromStep() {
+  console.log('[Review WhatsApp] function started');
+
+  var wo = workOrders.find(function(w){ return w.id === currentWOId; });
+  console.log('[Review WhatsApp] currentWOId:', currentWOId, 'wo:', wo ? wo.client : 'NOT FOUND');
+
+  if(!wo) {
+    alert('❌ لا يوجد أمر عمل نشط (currentWOId=' + currentWOId + ')');
+    return;
+  }
+
+  var reviewWindow = window.open('', '_blank');
+  showToast('⏳ جارٍ استرجاع رقم العميل...');
+  resolveWOPhone(wo).then(function(rawPhone) {
+    console.log('[Review WhatsApp] resolved phone:', rawPhone ? 'FOUND' : 'NOT FOUND');
+    if(!rawPhone) {
+      if(reviewWindow && !reviewWindow.closed) reviewWindow.close();
+      showToast('❌ لا يوجد رقم جوال مسجّل لهذا العميل');
+      return;
+    }
+    openReviewWhatsApp(wo, rawPhone, reviewWindow);
+  }).catch(function(err) {
+    if(reviewWindow && !reviewWindow.closed) reviewWindow.close();
+    console.error('[Review WhatsApp] phone lookup failed:', err);
+    showToast('❌ تعذر استرجاع رقم جوال العميل');
+  });
+}
+
+// يُستدعى من شاشة النجاح (زر ⭐ تقييم الموجود)
+function sendReviewRequest() {
+  var wo = workOrders.find(function(w){ return w.id === currentWOId; });
+  if(!wo) { showToast('❌ لا يوجد أمر عمل'); return; }
+  var reviewWindow = window.open('', '_blank');
+  showToast('⏳ جارٍ استرجاع رقم العميل...');
+  resolveWOPhone(wo).then(function(rawPhone) {
+    if(!rawPhone) {
+      if(reviewWindow && !reviewWindow.closed) reviewWindow.close();
+      showToast('❌ لا يوجد رقم جوال مسجّل لهذا العميل');
+      return;
+    }
+    openReviewWhatsApp(wo, rawPhone, reviewWindow);
+  }).catch(function(err) {
+    if(reviewWindow && !reviewWindow.closed) reviewWindow.close();
+    console.error('[Review WhatsApp] phone lookup failed:', err);
+    showToast('❌ تعذر استرجاع رقم جوال العميل');
+  });
+}
+
+// ===== ?? التقرير اليومي =====
+function generateDailyReport() {
+  var today = new Date().toISOString().split('T')[0];
+  var todayWOs = workOrders.filter(function(w){ return w.date === today; });
+  var completed = todayWOs.filter(function(w){ return w.status==='done'||w.status==='invoiced'; });
+  var totalRevenue = completed.reduce(function(sum,w){
+    var p = parseFloat(w.price)||0;
+    var parts = parseFloat(w.partsCost)||0;
+    var disc = parseFloat(w.discount)||0;
+    return sum + Math.max(0, p+parts-disc);
+  }, 0);
+  var msg = '?? التقرير اليومي - مؤسسة أطواد ❄️\n' +
+    '?? ' + today + '\n\n' +
+    'إجمالي المواعيد: ' + todayWOs.length + '\n' +
+    'المكتملة: ' + completed.length + '\n' +
+    'الإيرادات: ' + totalRevenue.toLocaleString('ar') + ' ريال\n\n' +
+    'تفاصيل الأعمال:\n' +
+    completed.map(function(w,i){
+      return (i+1)+'. '+w.client+' | '+(w.service||'')+' | '+(parseFloat(w.price)||0)+' ريال';
+    }).join('\n');
+  window.open('https://wa.me/966509720382?text='+encodeURIComponent(msg),'_blank');
+  showToast('✅ تم إرسال التقرير اليومي');
+}
+
+</script>
+</body>
+</html>
