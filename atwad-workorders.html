@@ -270,12 +270,19 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
             <select id="w_service">
               <option value="">-- اختر --</option>
               <option>تنظيف مكيف</option>
+              <option>غسيل مكيفات</option>
               <option>تنظيف وغسيل المكيفات</option>
               <option>صيانة دورية</option>
+              <option>صيانة وقائية دورية</option>
               <option>تعبئة غاز</option>
+              <option>تعبئة فريون</option>
+              <option>كشف وإصلاح</option>
               <option>كشف وإصلاح أعطال</option>
+              <option>تركيب مكيف جديد</option>
               <option>تركيب مكيف</option>
+              <option>باقة صيانة سنوية</option>
               <option>باقة سنوية</option>
+              <option>أخرى</option>
             </select>
           </div>
           <div class="form-group"><label>نوع المكيف</label>
@@ -439,6 +446,83 @@ try {
   db = firebase.database();
 } catch(e){ console.log('Firebase:',e); }
 
+// قراءة اسم الخدمة من جميع الصيغ التي استُخدمت في الحجوزات والمواعيد القديمة.
+// لا نستبدل خدمة صحيحة، بل نستخدم هذه الدالة فقط عند الإنشاء أو لاستكمال سجل ناقص.
+function getSourceServiceName(source) {
+  if(!source || typeof source !== 'object') return '';
+  var values = [
+    source.service, source.serviceAr, source.serviceName, source.serviceType,
+    source.serviceTitle, source.workType, source.requestType
+  ];
+  for(var i=0; i<values.length; i++) {
+    var value = values[i];
+    if(value !== undefined && value !== null) {
+      value = String(value).trim();
+      if(value && value !== '—') return value;
+    }
+  }
+  return '';
+}
+
+function normalizeSourcePhone(value) {
+  var digits = String(value || '').replace(/[^0-9]/g, '');
+  if(digits.indexOf('00966') === 0) digits = digits.slice(5);
+  else if(digits.indexOf('966') === 0) digits = digits.slice(3);
+  if(digits.indexOf('0') === 0) digits = digits.slice(1);
+  return digits.slice(-9);
+}
+
+function sourceSnapshotMap(snap) {
+  var map = {};
+  if(snap) snap.forEach(function(child){ map[child.key] = child.val() || {}; });
+  return map;
+}
+
+function findLinkedSourceForWO(wo, appointmentMap, bookingMap) {
+  if(!wo) return null;
+  if(wo.firebaseRef && bookingMap[wo.firebaseRef]) return bookingMap[wo.firebaseRef];
+  if(wo.sourceApptKey) {
+    if(wo.sourceApptSrc === 'bookings' && bookingMap[wo.sourceApptKey]) return bookingMap[wo.sourceApptKey];
+    if(wo.sourceApptSrc === 'appointments' && appointmentMap[wo.sourceApptKey]) return appointmentMap[wo.sourceApptKey];
+    if(appointmentMap[wo.sourceApptKey]) return appointmentMap[wo.sourceApptKey];
+    if(bookingMap[wo.sourceApptKey]) return bookingMap[wo.sourceApptKey];
+  }
+
+  // حماية للسجلات القديمة التي سبقت إضافة مفاتيح الربط: لا نعتمد المطابقة
+  // إلا إذا كانت نتيجة واحدة مؤكدة بالجوال والتاريخ.
+  var phone = normalizeSourcePhone(wo.phone);
+  var date = String(wo.date || '');
+  if(!phone || !date) return null;
+  var matches = [];
+  [appointmentMap, bookingMap].forEach(function(map){
+    Object.keys(map).forEach(function(key){
+      var item = map[key] || {};
+      if(String(item.date || '') === date && normalizeSourcePhone(item.phone) === phone) matches.push(item);
+    });
+  });
+  if(matches.length === 1) return matches[0];
+  if(matches.length > 1) {
+    var serviceNames = matches.map(getSourceServiceName).filter(Boolean);
+    var uniqueServices = serviceNames.filter(function(name, index){ return serviceNames.indexOf(name) === index; });
+    if(uniqueServices.length === 1) return matches[0];
+  }
+  return null;
+}
+
+function completeMissingWorkOrderServices(list, appointmentMap, bookingMap) {
+  return (list || []).map(function(wo){
+    var currentService = getSourceServiceName(wo);
+    if(currentService) {
+      if(!wo.service) wo.service = currentService;
+      return wo;
+    }
+    var source = findLinkedSourceForWO(wo, appointmentMap, bookingMap);
+    var recoveredService = getSourceServiceName(source);
+    if(recoveredService) wo.service = recoveredService;
+    return wo;
+  });
+}
+
 function importWOFromFirebase() {
   if(!db){ showToast('⚠️ Firebase غير متاح'); return; }
   var btn = document.getElementById('importWOBtn');
@@ -475,7 +559,7 @@ function importWOFromFirebase() {
         status: 'open',
         client:  b.client||b.name||'—',
         phone:   (b.phone||'').replace(/[^0-9]/g,'').replace(/^966/,'0'),
-        address: b.city||'جدة', service: b.service||'تنظيف مكيف',
+        address: b.city||'جدة', service: getSourceServiceName(b)||'تنظيف مكيف',
         actype:  'سبليت', units: b.units||1, tech: 'Abrar',
         date: b.date, time: (b.time||'').split(' - ')[0]||b.time||'',
         problem: 'من نموذج الحجز الإلكتروني', parts: '',
@@ -507,7 +591,7 @@ function importWOFromFirebase() {
           client:  a.client||'—',
           phone:   (a.phone||'').replace(/[^0-9]/g,'').replace(/^966/,'0'),
           address: a.address||a.city||'جدة',
-          service: a.service||'—',
+          service: getSourceServiceName(a)||'—',
           actype:  'سبليت', units: a.units||1, tech: a.tech||'',
           date: a.date, time: (a.time||'').split(' - ')[0]||a.time||'',
           problem: a.notes||'من صفحة المواعيد', parts: '',
@@ -552,13 +636,28 @@ function syncFromFirebase() {
       delete clean._fbKey;
       fbData.push(Object.assign(clean, {_fbKey: child.key}));
     });
-    // دائماً نُحدِّث من Firebase — حتى لو جاءت قائمة أقل من المحلية
-    // هذا يضمن أن أي أمر محفوظ في Firebase يظهر بعد إعادة التحميل
-    workOrders = fbData;
-    localStorage.setItem('atwad_workorders', JSON.stringify(workOrders));
-    updateStats();
-    renderWOs();
-    document.getElementById('fbDot') && (document.getElementById('fbDot').className='fb-dot connected');
+    // استكمل الخدمة الناقصة من الموعد/الحجز المرتبط للعرض والتعامل الحالي.
+    // القراءة هنا آمنة ولا تكتب تلقائياً في Firebase؛ عند حفظ أمر العمل لاحقاً
+    // تُحفظ الخدمة المسترجعة معه بصورة طبيعية.
+    Promise.all([
+      db.ref('appointments').once('value'),
+      db.ref('bookings').once('value')
+    ]).then(function(sourceSnaps) {
+      workOrders = completeMissingWorkOrderServices(
+        fbData,
+        sourceSnapshotMap(sourceSnaps[0]),
+        sourceSnapshotMap(sourceSnaps[1])
+      );
+    }).catch(function(sourceErr) {
+      console.warn('[workOrders] تعذر استكمال الخدمات من مصادرها:', sourceErr);
+      workOrders = fbData;
+    }).then(function() {
+      // دائماً نُحدِّث من Firebase — حتى لو جاءت قائمة أقل من المحلية.
+      localStorage.setItem('atwad_workorders', JSON.stringify(workOrders));
+      updateStats();
+      renderWOs();
+      document.getElementById('fbDot') && (document.getElementById('fbDot').className='fb-dot connected');
+    });
   }, function(err) {
     console.error('[workOrders] Firebase error:', err);
     document.getElementById('fbDot') && (document.getElementById('fbDot').className='fb-dot');
@@ -599,6 +698,20 @@ function escapeHTML(value){
   return String(value == null ? '' : value)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function setSelectValueKeepingLegacyOption(selectId, value) {
+  var select = document.getElementById(selectId);
+  value = String(value || '').trim();
+  if(!select) return;
+  if(value && !Array.prototype.some.call(select.options, function(option){ return option.value === value; })) {
+    var legacyOption = document.createElement('option');
+    legacyOption.value = value;
+    legacyOption.textContent = value;
+    legacyOption.setAttribute('data-source-service', 'true');
+    select.appendChild(legacyOption);
+  }
+  select.value = value;
 }
 
 // ===== STATS =====
@@ -741,7 +854,7 @@ function openWODetail(id){
   document.getElementById('w_client').value  = w.client  || '';
   document.getElementById('w_phone').value   = w.phone   || '';
   document.getElementById('w_address').value = w.address || '';
-  document.getElementById('w_service').value = w.service || '';
+  setSelectValueKeepingLegacyOption('w_service', getSourceServiceName(w));
   document.getElementById('w_actype').value  = w.actype  || '';
   document.getElementById('w_tech').value    = w.tech    || '';
   document.getElementById('w_units').value   = w.units   || 1;

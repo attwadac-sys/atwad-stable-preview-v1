@@ -2636,6 +2636,19 @@ function markDone(id){
 // ============================================================
 // إنشاء أمر عمل لموعد مكتمل لا يوجد له أمر عمل
 // ============================================================
+function getWorkOrderServiceFromAppointment(a) {
+  if(!a || typeof a !== 'object') return '';
+  var values = [a.service, a.serviceAr, a.serviceName, a.serviceType, a.serviceTitle];
+  for(var i=0; i<values.length; i++) {
+    var value = values[i];
+    if(value !== undefined && value !== null) {
+      value = String(value).trim();
+      if(value && value !== '—') return value;
+    }
+  }
+  return '';
+}
+
 function createMissingWO(apptId) {
   var a = findAppt(apptId);
   if(!a || !db) return;
@@ -2657,7 +2670,7 @@ function createMissingWO(apptId) {
       client:         a.client || '—',
       phone:          (a.phone||'').replace(/[^0-9]/g,'').replace(/^966/,'0'),
       address:        a.address || a.city || 'جدة',
-      service:        a.service || '—',
+      service:        getWorkOrderServiceFromAppointment(a) || '—',
       units:          a.units || 1,
       tech:           a.tech || '',
       date:           a.date || '',
