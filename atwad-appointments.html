@@ -423,7 +423,7 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
         <div class="form-group"><label>نوع الخدمة <span class="req">*</span></label>
           <select id="f_service" onchange="onServiceOrUnitsChanged()">
             <option value="">-- اختر --</option>
-            <option>تنظيف مكيف</option><option>غسيل مكيفات</option>
+          <option>تنظيف وصيانة مكيفات</option>
             <option>صيانة دورية</option><option>تعبئة غاز</option>
             <option>كشف وإصلاح أعطال</option><option>تركيب مكيف جديد</option>
             <option>باقة صيانة سنوية</option>
@@ -586,8 +586,7 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
         <div class="form-group"><label>نوع الخدمة</label>
           <select id="wf_service">
             <option value="">أي خدمة</option>
-            <option>تنظيف وغسيل المكيفات</option>
-            <option>تنظيف مكيف</option>
+           <option>تنظيف وصيانة مكيفات</option>
             <option>صيانة دورية</option>
             <option>تعبئة غاز</option>
             <option>كشف وإصلاح أعطال</option>
@@ -1150,7 +1149,7 @@ function initFirebaseSync() {
           client: b.client || b.name || '—',
           phone: b.phone || '',
           address: b.city || 'جدة',
-          service: b.service || 'تنظيف مكيف',
+         service: b.service || 'تنظيف وصيانة مكيفات',
           units: b.units || 1,
           date: b.date,
           time: b.time.includes(' - ') ? b.time.split(' - ')[0] : b.time,
@@ -1826,7 +1825,7 @@ function resetLocFields() {
 function appointmentStartMinutes(time){ return atwadParseTime(time); }
 
 /** مدة مقترحة حسب الخدمة وعدد الوحدات — المسؤول يستطيع تعديلها */
-var SERVICE_UNIT_MINUTES = { 'تنظيف مكيف':30, 'غسيل مكيفات':30, 'صيانة دورية':45,
+var SERVICE_UNIT_MINUTES = { 'تنظيف مكيف':30, 'غسيل مكيفات':30, 'صيانة دورية':45,'تنظيف وصيانة مكيفات':30,
   'تعبئة غاز':45, 'كشف وإصلاح أعطال':60, 'صيانة مكيف':60, 'تركيب مكيف جديد':90, 'تركيب مكيف':90 };
 function suggestDuration(service,units){
   var per=SERVICE_UNIT_MINUTES[String(service||'').trim()]||45;
