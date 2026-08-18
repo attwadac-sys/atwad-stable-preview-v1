@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="atwad-build" content="2026-08-09-technician-ahmed-v1">
+<meta name="atwad-build" content="2026-08-18-technician-ahmed-exact-location-v2">
 <title>أطواد - appointments أحمد</title><style>
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
 :root{
@@ -253,6 +253,10 @@ function loadAppts() {
             status: b.status || 'pending',
             notes: 'Online Booking',
             locationImage: b.locationImage || '',
+            mapsLink: b.mapsLink || b.mapLink || b.location || b.locationUrl || b.googleMapsUrl || b.locationLink || '',
+            lat: b.lat != null ? b.lat : null,
+            lng: b.lng != null ? b.lng : null,
+            locationVerified: b.locationVerified === true || b.locationVerified === 'true',
             duration: b.duration || 60,
           });
         }
@@ -347,7 +351,7 @@ function renderAppts() {
         </div>
         <div class="card-actions">
           ${a.phone ? `<button class="act-btn btn-wa" onclick="openWhatsApp('${a.phone}','${a.client}','${a.service}','${a.time}')">📲 WhatsApp</button>` : ''}
-          <button class="act-btn btn-map" onclick="openMap('${a.address||''}')">🗺️ Map</button>
+          <button class="act-btn btn-map" onclick="openAppointmentMap('${aId}')">🗺️ Map</button>
           <button class="act-btn btn-done" ${isDone?'disabled':''} onclick="markDone('${aId}','${a._source}','${a._fbKey}')">
             ${isDone ? '✅ Completed' : '✓ Complete'}
           </button>
@@ -364,13 +368,47 @@ function openWhatsApp(phone, name, service, time) {
   window.open(`https://wa.me/966${phone.replace(/^0/,'')}?text=${msg}`, '_blank');
 }
 
-function openMap(address) {
-  // إذا كان الرابط من Google Maps يفتحه مباشرة
-  if(address.includes('maps.app.goo.gl') || address.includes('google.com/maps') || address.includes('goo.gl/maps')) {
-    window.open(address, '_blank');
-  } else {
-    window.open('https://maps.google.com?q=' + encodeURIComponent(address), '_blank');
+function isValidCoordinates(lat, lng) {
+  lat = Number(lat);
+  lng = Number(lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) &&
+         lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 &&
+         !(lat === 0 && lng === 0);
+}
+
+function openAppointmentMap(appointmentId) {
+  const a = allAppts.find(item => String(item.id || item._fbKey) === String(appointmentId));
+  if(!a) {
+    showToast('⚠️ Appointment location was not found');
+    return;
   }
+
+  // 1) The customer's saved Google Maps link is the most accurate source.
+  const mapsLink = String(
+    a.mapsLink || a.mapLink || a.location || a.locationUrl ||
+    a.googleMapsUrl || a.locationLink || ''
+  ).trim();
+  if(/^https?:\/\//i.test(mapsLink)) {
+    window.open(mapsLink, '_blank', 'noopener');
+    return;
+  }
+
+  // 2) Use the saved coordinates when a direct link is unavailable.
+  if(isValidCoordinates(a.lat, a.lng)) {
+    const coordinates = Number(a.lat) + ',' + Number(a.lng);
+    window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(coordinates), '_blank', 'noopener');
+    return;
+  }
+
+  // 3) Fall back to the written address only when no exact location exists.
+  const address = String(a.address || '').trim();
+  if(address) {
+    window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(address), '_blank', 'noopener');
+    showToast('⚠️ Exact location is not saved; opening the written address');
+    return;
+  }
+
+  showToast('⚠️ No location is saved for this customer');
 }
 
 function markDone(id, source, fbKey) {
