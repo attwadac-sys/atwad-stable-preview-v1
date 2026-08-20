@@ -338,7 +338,7 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
       <button onclick="openLockRepair()" title="فحص أقفال المواعيد وإصلاح الناقص منها" style="padding:7px 12px;border-radius:10px;border:1.5px solid #BFDBFE;background:#EFF6FF;color:#1E40AF;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">&#128274; فحص الأقفال</button>
       <button class="btn-primary" onclick="openNewAppt()" style="padding:8px 14px;font-size:12px;">＋ موعد</button>
       <button onclick="openWaitingList(null)" style="padding:7px 12px;background:#FEF9C3;color:#92400E;border:1.5px solid #FDE68A;border-radius:10px;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px;">
-        &#128196; <span class="waiting-count-badge" style="background:#EF4444;color:#fff;border-radius:50%;min-width:16px;height:16px;display:none;align-items:center;justify-content:center;font-size:9px;font-weight:700;margin-right:2px;padding:0 3px;"></span>
+        &#128196; <span id="waitingBadge" style="background:#EF4444;color:#fff;border-radius:50%;width:16px;height:16px;display:none;align-items:center;justify-content:center;font-size:9px;font-weight:700;margin-right:2px;"></span>
       </button>
     </div>
   </div>
@@ -423,17 +423,13 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
         <div class="form-group"><label>نوع الخدمة <span class="req">*</span></label>
           <select id="f_service" onchange="onServiceOrUnitsChanged()">
             <option value="">-- اختر --</option>
-          <option>تنظيف وصيانة مكيفات</option>
+            <option>تنظيف مكيف</option><option>غسيل مكيفات</option>
             <option>صيانة دورية</option><option>تعبئة غاز</option>
             <option>كشف وإصلاح أعطال</option><option>تركيب مكيف جديد</option>
             <option>باقة صيانة سنوية</option>
           </select>
         </div>
         <div class="form-group"><label>عدد المكيفات</label><input type="number" id="f_units" value="1" min="1" max="30" onchange="onServiceOrUnitsChanged()"></div>
-      </div>
-      <div class="form-group">
-        <label>سعر الخدمة المتفق عليه (ريال) <span class="req">*</span></label>
-        <input type="number" id="f_service_price" min="0" step="1" inputmode="decimal" placeholder="مثال: 180">
       </div>
       <div class="form-row">
         <div class="form-group"><label>تاريخ الزيارة <span class="req">*</span></label><input type="date" id="f_date"></div>
@@ -586,7 +582,8 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
         <div class="form-group"><label>نوع الخدمة</label>
           <select id="wf_service">
             <option value="">أي خدمة</option>
-           <option>تنظيف وصيانة مكيفات</option>
+            <option>تنظيف وغسيل المكيفات</option>
+            <option>تنظيف مكيف</option>
             <option>صيانة دورية</option>
             <option>تعبئة غاز</option>
             <option>كشف وإصلاح أعطال</option>
@@ -633,7 +630,7 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;position:sticky;top:0;background:#fff;padding-bottom:10px;border-bottom:1px solid var(--ice);">
       <h3 style="margin:0;font-size:15px;">&#128196; قائمة الانتظار</h3>
       <div style="display:flex;gap:8px;align-items:center;">
-        <span class="waiting-count-badge" style="background:#EF4444;color:#fff;border-radius:50%;min-width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;padding:0 4px;"></span>
+        <span id="waitingBadge" style="background:#EF4444;color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;"></span>
         <button onclick="openAddWaitingModal()" style="padding:6px 12px;background:var(--sky);color:#fff;border:none;border-radius:8px;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">➕ إضافة</button>
         <button onclick="document.getElementById('waitingListModal').classList.remove('open')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--mist);">×</button>
       </div>
@@ -754,7 +751,6 @@ let manualAreaApproved = false;
 let manualAreaDistrict = '';
 let pendingNewApptPrefill = null;
 let pendingNewApptApprovedCallback = null;
-let pendingWaitlistKey = null;
 
 const TECHS = { Abrar:'أحمد', 'أبرار':'أحمد', 'Abrar':'أحمد', Shoib:'شعيب', Suhail:'سهيل' };
 const STATUS_LABELS = { confirmed:'مؤكد', pending:'في الانتظار', done:'مكتمل', cancelled:'ملغي' };
@@ -885,10 +881,6 @@ function atwadStatusView(a){
 function atwadEsc(v){
   return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
-function atwadSafeImageDataUrl(v){
-  var s=String(v||'');
-  return /^data:image\/(?:png|jpe?g|webp);base64,[A-Za-z0-9+/=\r\n]+$/.test(s) ? s : '';
 }
 const TECH_COLORS = { Abrar:'#0EA5E9', Shoib:'#10B981', Suhail:'#8B5CF6' };
 
@@ -1141,7 +1133,6 @@ function initFirebaseSync() {
         var bookingStatus = atwadStatusLogic(b.status);
         // عرض الحجز ضمن المواعيد — قراءة فقط، دون أي كتابة أو نسخ
         fbAppts.push({
-          ...b,
           _statusRaw: b.status,
           _fbKey: child.key,
           _source: 'bookings',
@@ -1149,7 +1140,7 @@ function initFirebaseSync() {
           client: b.client || b.name || '—',
           phone: b.phone || '',
           address: b.city || 'جدة',
-         service: b.service || 'تنظيف وصيانة مكيفات',
+          service: b.service || 'تنظيف مكيف',
           units: b.units || 1,
           date: b.date,
           time: b.time.includes(' - ') ? b.time.split(' - ')[0] : b.time,
@@ -1235,9 +1226,9 @@ function renderWeek(){
       const dur = (a.duration||60);
       const tc = TECH_COLORS[a.tech]||'#0EA5E9';
       html += `<div class="appt-block status-${a.status||'pending'}" style="top:${top}px;height:${Math.max(dur-4,20)}px;" onclick="openDetail('${a.id||a._fbKey}')">
-        <div class="appt-time">${atwadEsc(a.time)}</div>
-        <div class="appt-name">${atwadEsc(a.client)}</div>
-        <div class="appt-tech" style="color:${tc}">▪ ${atwadEsc(TECHS[a.tech]||a.tech||'—')}</div>
+        <div class="appt-time">${a.time}</div>
+        <div class="appt-name">${a.client}</div>
+        <div class="appt-tech" style="color:${tc}">▪ ${TECHS[a.tech]||a.tech||'—'}</div>
       </div>`;
     });
     html += `</div></div>`;
@@ -1279,19 +1270,19 @@ function renderList(){
       const isBooking = a._source === 'bookings';
       const sv = atwadStatusView(a);
       html += `<div class="appt-card ${sv.card}" onclick="openDetail('${aId}')">
-        <div class="appt-time-block"><div class="t-start">${atwadEsc(a.time||'--:--')}</div><div class="t-dur">${atwadEsc(a.duration||60)} دق</div></div>
+        <div class="appt-time-block"><div class="t-start">${a.time||'--:--'}</div><div class="t-dur">${a.duration||60} دق</div></div>
         <div class="appt-divider"></div>
         <div class="appt-info">
-          <div class="appt-client">${atwadEsc(a.client)}</div>
-          <div class="appt-service">🛠️ ${atwadEsc(a.service||'—')} ${a.units>1?'('+atwadEsc(a.units)+' وحدات)':''}</div>
-          <div class="appt-address">📍 ${atwadEsc(a.address||'—')}</div>
+          <div class="appt-client">${a.client}</div>
+          <div class="appt-service">🛠️ ${a.service||'—'} ${a.units>1?'('+a.units+' وحدات)':''}</div>
+          <div class="appt-address">📍 ${a.address||'—'}</div>
           ${isBooking?'<span class="source-badge source-firebase">📱 حجز إلكتروني</span>':'<span class="source-badge source-local">✏️ يدوي</span>'}
           ${renderConflictBadge(a)}
           ${renderTechnicianNotificationBadge(a)}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
           <span class="status-pill ${sv.pill}">${sv.icon} ${atwadEsc(sv.label)}</span>
-          <span class="tech-pill" style="border-right:3px solid ${tc}">👷 ${atwadEsc(TECHS[a.tech]||a.tech||'—')}</span>
+          <span class="tech-pill" style="border-right:3px solid ${tc}">👷 ${TECHS[a.tech]||a.tech||'—'}</span>
         </div>
         <div class="appt-actions" onclick="event.stopPropagation()">
           <button class="act-btn act-remind" onclick="sendReminder('${aId}')" title="إرسال تذكير للعميل">🔔 تذكير</button>
@@ -1400,7 +1391,6 @@ function cancelManualAreaCheck() {
   pendingNewApptApprovedCallback = null;
   manualAreaApproved = false;
   manualAreaDistrict = '';
-  pendingWaitlistKey = null;
 }
 
 function openNewAppt(prefill, onApproved){
@@ -1460,7 +1450,6 @@ function openNewApptForm(){
   document.getElementById('f_tech').value='Abrar';
   document.getElementById('f_status').value='pending';
   document.getElementById('f_units').value='1';
-  document.getElementById('f_service_price').value='';
   document.getElementById('f_date').value=today();
   document.getElementById('f_time').value='09:00';
   document.getElementById('f_duration').value=suggestDuration('',1);
@@ -1475,16 +1464,10 @@ function openNewApptForm(){
     if(prefill.client) document.getElementById('f_client').value = prefill.client;
     if(prefill.phone) document.getElementById('f_phone').value = prefill.phone;
     if(prefill.service) document.getElementById('f_service').value = prefill.service;
-    if(prefill.units) document.getElementById('f_units').value = prefill.units;
-    if(prefill.servicePrice !== undefined && prefill.servicePrice !== null) {
-      document.getElementById('f_service_price').value = prefill.servicePrice;
-    }
     document.getElementById('f_tech').value = 'Abrar';
     if(prefill.date) document.getElementById('f_date').value = prefill.date;
     if(prefill.time) document.getElementById('f_time').value = prefill.time;
     if(prefill.notes) document.getElementById('f_notes').value = prefill.notes;
-    document.getElementById('f_duration').value = prefill.duration || suggestDuration(prefill.service, prefill.units || 1);
-    updateApptEndPreview();
   }
 
   document.getElementById('apptModal').classList.add('open');
@@ -1510,9 +1493,6 @@ function editAppt(id){
   document.getElementById('f_tech').value='Abrar';
   document.getElementById('f_status').value=a.status||'pending';
   document.getElementById('f_units').value=a.units||1;
-  document.getElementById('f_service_price').value =
-    (a.servicePrice !== undefined && a.servicePrice !== null) ? a.servicePrice :
-    ((a.price !== undefined && a.price !== null) ? a.price : '');
   document.getElementById('f_date').value=a.date||today();
   document.getElementById('f_time').value=(atwadParseTime(a.time)!==null)
       ? atwadMinutesToBlock(atwadParseTime(a.time)).replace(/^(\d{2})(\d{2})$/,'$1:$2') : '09:00';
@@ -1585,13 +1565,15 @@ function sendWhatsAppConfirmation(appt) {
   var phone = appt.phone.replace(/^0/,'966');
   var techNames = {Abrar:'أحمد',Shoib:'شعيب',Suhail:'سهيل'};
   var msg = 'مرحباً ' + (appt.client||'') + '\n\n' +
-    '✅ تم تأكيد موعدكم مع مؤسسة أطواد\n\n' +
+    '\u2705 تم تأكيد موعدكم مع مؤسسة أطواد لصيانة المكيفات\n\n' +
     'الخدمة: '+(appt.service||'')+'\n' +
     'عدد المكيفات: '+(appt.units||1)+'\n' +
     'التاريخ: '+(appt.date||'')+'\n' +
     'الوقت: '+(appt.time||'')+'\n' +
     'الفني: '+(techNames[appt.tech]||appt.tech||'')+'\n\n' +
-    'شكراً لثقتكم';
+    '\uD83D\uDCCC ملاحظة مهمة:\n' +
+    'في حال الرغبة في إلغاء الموعد أو تغيير موعده، نأمل إبلاغنا قبل الموعد بـ24 ساعة على الأقل؛ حيث يتم تخصيص وقت الفني وتجهيزه لخدمتكم، والإبلاغ المبكر يتيح لنا خدمة عميل آخر في هذا الوقت.\n\n' +
+    'شاكرين لكم تعاونكم وتقديركم لوقت فريق العمل، وشكرًا لثقتكم بمؤسسة أطواد لصيانة المكيفات \uD83C\uDF37';
   window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');
 }
 
@@ -1825,7 +1807,7 @@ function resetLocFields() {
 function appointmentStartMinutes(time){ return atwadParseTime(time); }
 
 /** مدة مقترحة حسب الخدمة وعدد الوحدات — المسؤول يستطيع تعديلها */
-var SERVICE_UNIT_MINUTES = { 'تنظيف مكيف':30, 'غسيل مكيفات':30, 'صيانة دورية':45,'تنظيف وصيانة مكيفات':30,
+var SERVICE_UNIT_MINUTES = { 'تنظيف مكيف':30, 'غسيل مكيفات':30, 'صيانة دورية':45,
   'تعبئة غاز':45, 'كشف وإصلاح أعطال':60, 'صيانة مكيف':60, 'تركيب مكيف جديد':90, 'تركيب مكيف':90 };
 function suggestDuration(service,units){
   var per=SERVICE_UNIT_MINUTES[String(service||'').trim()]||45;
@@ -2038,14 +2020,9 @@ function saveAppt(){
   const phone=document.getElementById('f_phone').value.trim();
   const address=document.getElementById('f_address').value.trim();
   const service=document.getElementById('f_service').value;
-  const servicePriceRaw=document.getElementById('f_service_price').value.trim();
-  const servicePrice=Number(atwadLatinDigits(servicePriceRaw));
   const tech='Abrar';
   const date=document.getElementById('f_date').value;
   if(!client||!phone||!service||!tech||!date) return showToast('❌ أكمل الحقول المطلوبة');
-  if(servicePriceRaw==='' || !isFinite(servicePrice) || servicePrice<0) {
-    return showToast('❌ أدخل سعر الخدمة المتفق عليه');
-  }
   if(!editingFirebaseKey) {
     if(!manualAreaApproved || !manualAreaDistrict) {
       return showToast('❌ يجب التحقق من نطاق الخدمة قبل حفظ الموعد');
@@ -2058,7 +2035,7 @@ function saveAppt(){
   }
 
   const data = {
-    client, phone, address, service, tech, servicePrice,
+    client, phone, address, service, tech,
     status: document.getElementById('f_status').value,
     units: parseInt(document.getElementById('f_units').value)||1,
     date, time: document.getElementById('f_time').value,
@@ -2213,7 +2190,6 @@ function saveAppt(){
     var _locVerifNew= !!(document.getElementById('appointment_location_verified') &&
                          document.getElementById('appointment_location_verified').value === 'true');
     var _custKeyNew = _foundCustomerKey || null;
-    var _waitlistKeyNew = pendingWaitlistKey || null;
 
     data.createdAt = new Date().toISOString();
 
@@ -2234,8 +2210,6 @@ function saveAppt(){
         });
       })
       .then(function() {
-        // لا يُغلق سجل الانتظار إلا بعد نجاح حفظ الموعد فعليًا.
-        if(_waitlistKeyNew) finalizeWaitingEntry(_waitlistKeyNew, _newKey);
         if(_saveToCustomerNew && _custKeyNew && _mapsLinkNew) {
           try {
             saveLocationToCustomer(_custKeyNew, {
@@ -2328,6 +2302,18 @@ function rescheduleChoice(choice) {
     if(key.charAt(0) !== '_') previousData[key] = previousAppt[key];
   });
 
+  var dataWithCancel = Object.assign({}, previousData, {
+    status:       'cancelled',
+    previousDate: previousData.date || _origDate,
+    cancelledAt:  new Date().toISOString(),
+    cancelReason: 'تم إعادة الجدولة إلى ' + date,
+    rescheduledTo: {
+      appointmentKey: newKey,
+      date: data.date || date,
+      time: data.time || ''
+    }
+  });
+
   var newData = Object.assign({}, data, {
     status:             'pending',
     createdAt:          new Date().toISOString(),
@@ -2335,33 +2321,8 @@ function rescheduleChoice(choice) {
     rescheduledFromKey: fbKey
   });
 
-  // احتفظ بالسعر وتشخيص العطل عند تحويل الحجز الإلكتروني إلى موعد إداري.
-  // لا تُنسخ حقول الأقفال الخاصة بالسجل القديم.
-  [
-    'servicePrice','price','problemCodes','problemLabels','problemDescriptionSummary',
-    'problemDescription','acOperatingStatus','previousRepairStatus',
-    'previousRepairDetails','visitedBefore','previousTechnicianSolved','priority',
-    'requiredTools','estimatedInspection','recommendations','accuracy',
-    'needsServiceAreaReview','serviceAreaNote','otherServiceText','ref'
-  ].forEach(function(field){
-    if(newData[field] === undefined && previousData[field] !== undefined) {
-      newData[field] = previousData[field];
-    }
-  });
-  if(sourcePath === 'bookings') newData.sourceBookingKey = fbKey;
-  else if(previousData.sourceBookingKey) newData.sourceBookingKey = previousData.sourceBookingKey;
-
   var atomicUpdates = {};
-  // حدّث حالة السجل السابق فقط. استبداله كاملًا كان يفقد السعر وتفاصيل العطل.
-  atomicUpdates[sourcePath + '/' + fbKey + '/status'] = 'cancelled';
-  atomicUpdates[sourcePath + '/' + fbKey + '/previousDate'] = previousData.date || _origDate;
-  atomicUpdates[sourcePath + '/' + fbKey + '/cancelledAt'] = new Date().toISOString();
-  atomicUpdates[sourcePath + '/' + fbKey + '/cancelReason'] = 'تم إعادة الجدولة إلى ' + date;
-  atomicUpdates[sourcePath + '/' + fbKey + '/rescheduledTo'] = {
-    appointmentKey: newKey,
-    date: data.date || date,
-    time: data.time || ''
-  };
+  atomicUpdates[sourcePath + '/' + fbKey] = dataWithCancel;
   atomicUpdates['appointments/' + newKey] = newData;
 
   var _oldOwner   = (sourcePath === 'bookings' ? 'bookings:' : 'appointments:') + fbKey;
@@ -2576,7 +2537,6 @@ function closeModal(){
   editingSource=null;
   manualAreaApproved=false;
   manualAreaDistrict='';
-  pendingWaitlistKey=null;
   document.getElementById('areaApprovedBanner').style.display='none';
   endManualSave();
 }
@@ -2588,23 +2548,22 @@ function openDetail(id){
   const tc=TECH_COLORS[a.tech]||'#0EA5E9';
   const dsv=atwadStatusView(a);
   const aId = a.id || a._fbKey;
-  const safeLocationImage = atwadSafeImageDataUrl(a.locationImage);
   document.getElementById('detailTitle').textContent='📋 ' + a.client;
   document.getElementById('detailEditBtn').onclick=()=>editAppt(aId);
   document.getElementById('detailBody').innerHTML=`
     <div style="background:var(--frost);border-radius:12px;padding:16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
-      <div><div style="font-size:18px;font-weight:800;color:var(--deep)">${atwadEsc(a.client)}</div><div style="font-size:13px;color:var(--mist);margin-top:3px;">📱 <a href="tel:${atwadEsc(a.phone)}" style="color:var(--sky)">${atwadEsc(a.phone)}</a></div></div>
+      <div><div style="font-size:18px;font-weight:800;color:var(--deep)">${a.client}</div><div style="font-size:13px;color:var(--mist);margin-top:3px;">📱 <a href="tel:${a.phone}" style="color:var(--sky)">${a.phone}</a></div></div>
       <span class="status-pill ${dsv.pill}">${dsv.icon} ${atwadEsc(dsv.label)}</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-      <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">🛠️ الخدمة</div><div style="font-weight:700;color:var(--deep)">${atwadEsc(a.service||'—')}</div><div style="font-size:12px;color:var(--mist)">${atwadEsc(a.units||1)} وحدة</div></div>
-      <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">📅 الموعد</div><div style="font-weight:700;color:var(--deep)">${atwadEsc(formatDateShort(a.date))}</div><div style="font-size:12px;color:var(--mist)">⏰ ${atwadEsc(a.time||'—')}</div></div>
-      <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">👷 الفني</div><div style="font-weight:700;color:${tc}">${atwadEsc(TECHS[a.tech]||a.tech||'—')}</div></div>
-      <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">📍 الموقع</div><div style="font-weight:700;color:var(--deep);font-size:12px">${atwadEsc(a.address||'—')}</div></div>
+      <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">🛠️ الخدمة</div><div style="font-weight:700;color:var(--deep)">${a.service||'—'}</div><div style="font-size:12px;color:var(--mist)">${a.units||1} وحدة</div></div>
+      <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">📅 الموعد</div><div style="font-weight:700;color:var(--deep)">${formatDateShort(a.date)}</div><div style="font-size:12px;color:var(--mist)">⏰ ${a.time||'—'}</div></div>
+      <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">👷 الفني</div><div style="font-weight:700;color:${tc}">${TECHS[a.tech]||a.tech||'—'}</div></div>
+      <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">📍 الموقع</div><div style="font-weight:700;color:var(--deep);font-size:12px">${a.address||'—'}</div></div>
     </div>
     ${renderTechnicianNotificationBadge(a)?`<div style="margin-bottom:12px;">${renderTechnicianNotificationBadge(a)}</div>`:''}
-    ${a.notes?`<div style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;color:#92400E;">📝 ${atwadEsc(a.notes)}</div>`:''}
-    ${safeLocationImage?`<div style="margin-bottom:14px;"><div style="font-size:12px;color:var(--mist);margin-bottom:6px;">📸 صورة الموقع</div><img src="${safeLocationImage}" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;border:1.5px solid var(--ice);"></div>`:''}
+    ${a.notes?`<div style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;color:#92400E;">📝 ${a.notes}</div>`:''}
+    ${a.locationImage?`<div style="margin-bottom:14px;"><div style="font-size:12px;color:var(--mist);margin-bottom:6px;">📸 صورة الموقع</div><img src="${a.locationImage}" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;border:1.5px solid var(--ice);" onclick="window.open('${a.locationImage}','_blank')"></div>`:''}
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <a href="https://wa.me/966${(a.phone||'').replace(/^0/,'')}?text=${encodeURIComponent('مرحباً '+a.client+'،\nتذكير بموعدكم مع مؤسسة أطواد\nالخدمة: '+a.service+'\nالتاريخ: '+formatDateShort(a.date)+'\nالوقت: '+a.time)}" target="_blank" style="flex:1;text-align:center;padding:10px;background:#25D366;color:#fff;border-radius:9px;font-weight:700;text-decoration:none;font-size:13px;min-width:100px;">📲 تذكير</a>
       <button onclick="sendWhatsAppConfirmation(findAppt('${aId}'))" style="flex:1;padding:10px;background:#DBEAFE;color:#1E40AF;border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:100px;">✅ تأكيد للعميل</button>
@@ -2635,19 +2594,6 @@ function markDone(id){
 // ============================================================
 // إنشاء أمر عمل لموعد مكتمل لا يوجد له أمر عمل
 // ============================================================
-function getWorkOrderServiceFromAppointment(a) {
-  if(!a || typeof a !== 'object') return '';
-  var values = [a.service, a.serviceAr, a.serviceName, a.serviceType, a.serviceTitle];
-  for(var i=0; i<values.length; i++) {
-    var value = values[i];
-    if(value !== undefined && value !== null) {
-      value = String(value).trim();
-      if(value && value !== '—') return value;
-    }
-  }
-  return '';
-}
-
 function createMissingWO(apptId) {
   var a = findAppt(apptId);
   if(!a || !db) return;
@@ -2669,17 +2615,14 @@ function createMissingWO(apptId) {
       client:         a.client || '—',
       phone:          (a.phone||'').replace(/[^0-9]/g,'').replace(/^966/,'0'),
       address:        a.address || a.city || 'جدة',
-      service:        getWorkOrderServiceFromAppointment(a) || '—',
+      service:        a.service || '—',
       units:          a.units || 1,
       tech:           a.tech || '',
       date:           a.date || '',
       time:           (a.time||'').split(' - ')[0] || a.time || '',
       problem:        a.notes || 'من الموعد',
       parts:          '',
-      price:          Number(a.servicePrice || a.price || 0),
-      servicePrice:   Number(a.servicePrice || a.price || 0),
-      partsCost: 0, discount: 0,
-      total:          Number(a.servicePrice || a.price || 0),
+      price:          0, partsCost: 0, discount: 0, total: 0,
       payment:        'كاش', rating: 0,
       createdAt:      new Date().toISOString()
     };
@@ -3088,26 +3031,8 @@ function loadWaitingList() {
       waitingList.push(Object.assign({}, c.val(), {_key: c.key}));
     });
     // تحديث عداد قائمة الانتظار
-    document.querySelectorAll('.waiting-count-badge').forEach(function(badge){
-      badge.textContent = waitingList.length || '';
-      badge.style.display = waitingList.length ? 'flex' : 'none';
-    });
-  });
-}
-
-/** يُغلق سجل الانتظار بعد نجاح إنشاء الموعد، ويربطه بالموعد الجديد. */
-function finalizeWaitingEntry(key, appointmentKey) {
-  if(!db || !key || !appointmentKey) return Promise.resolve(false);
-  return db.ref('appointmentWaitlist/' + key).update({
-    booked: true,
-    bookedAt: firebase.database.ServerValue.TIMESTAMP,
-    appointmentKey: appointmentKey
-  }).then(function(){
-    return true;
-  }).catch(function(err){
-    console.error('waitlist finalize:', err);
-    showToast('⚠️ تم حفظ الموعد، لكن تعذر تحديث قائمة الانتظار. راجعها يدويًا.');
-    return false;
+    var badge = document.getElementById('waitingBadge');
+    if(badge) badge.textContent = waitingList.length || '';
   });
 }
 
@@ -3215,22 +3140,22 @@ function openWaitingList(freeAppt) {
       return '<div class="waiting-row" style="flex-direction:column;align-items:stretch;gap:8px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
           '<div>' +
-            '<div class="wname">' + starsHtml + ' ' + atwadEsc(w.name) + '</div>' +
+            '<div class="wname">' + starsHtml + ' ' + w.name + '</div>' +
             '<div class="wservice">' +
-              (w.district ? '📍 ' + atwadEsc(w.district) + ' · ' : '') +
-              '🛠️ ' + atwadEsc(w.service||'أي خدمة') +
+              (w.district ? '📍 ' + w.district + ' · ' : '') +
+              '🛠️ ' + (w.service||'أي خدمة') +
             '</div>' +
             '<div style="font-size:11px;color:var(--mist);margin-top:2px;">' +
               '⏰ ' + (periodLabels[w.period]||'أي وقت') +
               ' · ' + (flexLabels[w.flexibility]||'أي وقت') +
-              (w.preferredTech ? ' · 👷 ' + atwadEsc(TECHS[w.preferredTech]||w.preferredTech) : '') +
+              (w.preferredTech ? ' · 👷 ' + (TECHS[w.preferredTech]||w.preferredTech) : '') +
             '</div>' +
-            (w.notes ? '<div style="font-size:11px;color:var(--mist);">📝 ' + atwadEsc(w.notes) + '</div>' : '') +
+            (w.notes ? '<div style="font-size:11px;color:var(--mist);">📝 ' + w.notes + '</div>' : '') +
           '</div>' +
         '</div>' +
         '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
-          '<a class="btn-book-waiting" style="background:#DCFCE7;color:#15803D;text-decoration:none;padding:5px 10px;border-radius:7px;font-size:11px;font-weight:700;" href="tel:' + atwadEsc(w.phone) + '">📞 اتصال</a>' +
-          '<a class="btn-book-waiting" style="background:#DCFCE7;color:#15803D;text-decoration:none;padding:5px 10px;border-radius:7px;font-size:11px;font-weight:700;" href="https://wa.me/966' + atwadEsc(w.phone.replace(/^0/,'')) + '" target="_blank" rel="noopener">📲 واتساب</a>' +
+          '<a class="btn-book-waiting" style="background:#DCFCE7;color:#15803D;text-decoration:none;padding:5px 10px;border-radius:7px;font-size:11px;font-weight:700;" href="tel:' + w.phone + '">📞 اتصال</a>' +
+          '<a class="btn-book-waiting" style="background:#DCFCE7;color:#15803D;text-decoration:none;padding:5px 10px;border-radius:7px;font-size:11px;font-weight:700;" href="https://wa.me/966' + w.phone.replace(/^0/,'') + '" target="_blank">📲 واتساب</a>' +
           '<button class="btn-book-waiting" style="background:#DBEAFE;color:#1E40AF;" onclick="agreeFromWaiting(\'' + w._key + '\')">✅ تم الاتفاق</button>' +
           '<button class="btn-book-waiting" style="background:#FEE2E2;color:#991B1B;" onclick="removeFromWaiting(\'' + w._key + '\')">✕ إزالة</button>' +
         '</div>' +
@@ -3256,14 +3181,12 @@ function agreeFromWaiting(key) {
     service: w.service || '',
     tech: 'Abrar',
     date: (freeAppt && freeAppt.date) || '',
-    time: (freeAppt && freeAppt.time) || '',
-    duration: freeAppt ? atwadDuration(freeAppt) : '',
-    servicePrice: w.servicePrice
+    time: (freeAppt && freeAppt.time) || ''
   }, function(){
-    // يُعلَّم كـ «محجوز» فقط بعد نجاح حفظ الموعد، وليس عند فتح النموذج.
-    pendingWaitlistKey = key;
+    // تعليم كـ محجوز فقط بعد اجتياز فحص النطاق وفتح نموذج الموعد
+    if(db) db.ref('appointmentWaitlist/' + key).update({booked: true, bookedAt: new Date().toISOString()});
     document.getElementById('waitingListModal').classList.remove('open');
-    showToast('✅ تم فتح نموذج الموعد لـ ' + w.name + ' — أكمل البيانات ثم احفظ');
+    showToast('✅ تم التحقق من النطاق وفتح نموذج الموعد لـ ' + w.name);
   });
 }
 
