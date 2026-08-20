@@ -1153,7 +1153,7 @@ function initFirebaseSync() {
           sourceBookingKey: child.key,
           createdAt: b.createdAt || '',
           // حقول الموقع — تُنسخ من الحجز الأصلي
-          mapsLink:        b.mapsLink || b.mapLink || b.location || b.locationUrl || b.googleMapsUrl || b.locationLink || '',
+          mapsLink:        b.mapsLink || b.mapLink || b.mapUrl || b.location || b.locationUrl || b.googleMapsUrl || b.googleMapsLink || b.locationLink || '',
           lat:             b.lat  != null ? b.lat  : '',
           lng:             b.lng  != null ? b.lng  : '',
           locationImage:   b.locationImage   || '',
@@ -1534,7 +1534,13 @@ function editAppt(id){
     _locLng = Number(a.lng);
     document.getElementById('appointment_lat').value = a.lat;
     document.getElementById('appointment_lng').value = a.lng;
-    if(isValidCoordinates(_locLat, _locLng)) showLocPreview(_locLat, _locLng);
+    if(isValidCoordinates(_locLat, _locLng)) {
+      showLocPreview(_locLat, _locLng);
+      // الإحداثيات الموثقة أدق من بعض الروابط المختصرة التي قد تفتح اسم المدينة فقط.
+      document.getElementById('loc_open_btn').href = 'https://www.google.com/maps?q=' +
+        encodeURIComponent(_locLat + ',' + _locLng);
+      document.getElementById('loc_open_btn').style.display = 'inline-flex';
+    }
   }
   if(a.locationSource) document.getElementById('appointment_location_source').value = a.locationSource;
   if(a.locationVerified === true || a.locationVerified === 'true') {
@@ -1565,15 +1571,15 @@ function sendWhatsAppConfirmation(appt) {
   var phone = appt.phone.replace(/^0/,'966');
   var techNames = {Abrar:'أحمد',Shoib:'شعيب',Suhail:'سهيل'};
   var msg = 'مرحباً ' + (appt.client||'') + '\n\n' +
-    '\u2705 تم تأكيد موعدكم مع مؤسسة أطواد لصيانة المكيفات\n\n' +
+    'تم تأكيد موعدكم مع مؤسسة أطواد لصيانة المكيفات\n\n' +
     'الخدمة: '+(appt.service||'')+'\n' +
     'عدد المكيفات: '+(appt.units||1)+'\n' +
     'التاريخ: '+(appt.date||'')+'\n' +
     'الوقت: '+(appt.time||'')+'\n' +
     'الفني: '+(techNames[appt.tech]||appt.tech||'')+'\n\n' +
-    '\uD83D\uDCCC ملاحظة مهمة:\n' +
-    'في حال الرغبة في إلغاء الموعد أو تغيير موعده، نأمل إبلاغنا قبل الموعد بـ24 ساعة على الأقل؛ حيث يتم تخصيص وقت الفني وتجهيزه لخدمتكم، والإبلاغ المبكر يتيح لنا خدمة عميل آخر في هذا الوقت.\n\n' +
-    'شاكرين لكم تعاونكم وتقديركم لوقت فريق العمل، وشكرًا لثقتكم بمؤسسة أطواد لصيانة المكيفات \uD83C\uDF37';
+    'ملاحظة مهمة:\n' +
+    'في حال الرغبة في إلغاء الموعد أو تغييره، نأمل إبلاغنا قبل الموعد بـ24 ساعة على الأقل؛ حيث يتم تخصيص وقت الفني وتجهيزه لخدمتكم، والإبلاغ المبكر يتيح لنا خدمة عميل آخر في هذا الوقت.\n\n' +
+    'شاكرين لكم تعاونكم وتقديركم لوقت فريق العمل، وشكرًا لثقتكم بمؤسسة أطواد لصيانة المكيفات.';
   window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');
 }
 
@@ -2542,12 +2548,45 @@ function closeModal(){
 }
 
 // ===== DETAIL =====
+function appointmentMapsUrl(a){
+  if(!a) return '';
+
+  // استخدم الإحداثيات الموثقة أولاً؛ بعض الروابط المختصرة قد تفتح اسم المدينة فقط.
+  var lat = Number(a.lat), lng = Number(a.lng);
+  if(Number.isFinite(lat) && Number.isFinite(lng) &&
+     lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 &&
+     !(lat === 0 && lng === 0)){
+    return 'https://www.google.com/maps?q=' + encodeURIComponent(lat + ',' + lng);
+  }
+
+  // استخدم رابط العميل إذا لم تتوفر إحداثيات صالحة.
+  var candidates = [
+    a.mapsLink, a.mapLink, a.mapUrl, a.locationUrl,
+    a.googleMapsUrl, a.googleMapsLink, a.locationLink
+  ];
+  for(var i=0;i<candidates.length;i++){
+    var link = String(candidates[i] || '').trim();
+    if(/^https?:\/\//i.test(link)) return link;
+  }
+
+  // العناوين التفصيلية القديمة فقط؛ لا تفتح مدينة جدة كاملة كموقع للعميل.
+  var address = String(a.address || '').trim();
+  var generic = address.toLowerCase().replace(/\s+/g,'');
+  var genericAddresses = ['', 'جدة', 'jeddah', 'jeddah/جدة', 'جدة/jeddah'];
+  if(genericAddresses.indexOf(generic) === -1){
+    return 'https://www.google.com/maps/search/?api=1&query=' +
+      encodeURIComponent(address + '، المملكة العربية السعودية');
+  }
+  return '';
+}
+
 function openDetail(id){
   const a = findAppt(id);
   if(!a) return;
   const tc=TECH_COLORS[a.tech]||'#0EA5E9';
   const dsv=atwadStatusView(a);
   const aId = a.id || a._fbKey;
+  const detailMapsUrl = appointmentMapsUrl(a);
   document.getElementById('detailTitle').textContent='📋 ' + a.client;
   document.getElementById('detailEditBtn').onclick=()=>editAppt(aId);
   document.getElementById('detailBody').innerHTML=`
@@ -2571,7 +2610,9 @@ function openDetail(id){
         ? `<button onclick="sendToTechnician('${aId}')" style="flex:1;padding:10px;background:#7C3AED;color:#fff;border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:100px;">📤 إرسال للفني</button>
            <button onclick="copyTaskMessage('${aId}')" style="flex:1;padding:10px;background:#F3F4F6;color:#374151;border:1px solid #D1D5DB;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:100px;">📋 نسخ المهمة</button>`
         : `<button disabled style="flex:1;padding:10px;background:#E9D5FF;color:#A78BFA;border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:not-allowed;min-width:100px;" title="عيّن فنيًا أولًا">📤 إرسال للفني</button>`}
-      <a href="https://maps.google.com?q=${encodeURIComponent(a.address||'')}" target="_blank" style="flex:1;text-align:center;padding:10px;background:var(--ice);color:var(--sky);border-radius:9px;font-weight:700;text-decoration:none;font-size:13px;min-width:100px;">🗺️ خرائط</a>
+      ${detailMapsUrl
+        ? `<a href="${atwadEsc(detailMapsUrl)}" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;padding:10px;background:var(--ice);color:var(--sky);border-radius:9px;font-weight:700;text-decoration:none;font-size:13px;min-width:100px;">🗺️ خرائط</a>`
+        : `<button type="button" disabled title="لا يوجد رابط أو إحداثيات دقيقة لهذا الموعد" style="flex:1;padding:10px;background:#F1F5F9;color:#94A3B8;border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:not-allowed;min-width:100px;">🗺️ لا يوجد موقع دقيق</button>`}
       ${a.status!=='done'?`<button onclick="markDone('${aId}');document.getElementById('detailModal').classList.remove('open')" style="flex:1;padding:10px;background:#D1FAE5;color:var(--success);border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:80px;">✓ إتمام</button>`:''}
       <button onclick="deleteAppt('${aId}',null);document.getElementById('detailModal').classList.remove('open')" style="flex:1;padding:10px;background:#FEE2E2;color:#EF4444;border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:80px;">🗑️ حذف</button>
     </div>`;
@@ -2721,13 +2762,14 @@ function buildTechnicianMessage(a) {
   var locText = a.address || a.city || '';
   if(locText)    lines.push('📍 العنوان: '  + locText);
 
-  // رابط الموقع — بالأولوية
-  var mapsUrl = a.mapsLink || a.mapUrl || a.locationUrl || a.googleMapsUrl || a.locationLink || '';
-  if(!mapsUrl && a.lat && a.lng) {
-    var lat = Number(a.lat), lng = Number(a.lng);
-    if(Number.isFinite(lat) && Number.isFinite(lng) && !(lat===0&&lng===0))
-      mapsUrl = 'https://www.google.com/maps?q=' + lat + ',' + lng;
-  }
+  // رابط الموقع — الإحداثيات الموثقة أولاً حتى يصل الفني إلى الموقع الدقيق.
+  var mapsUrl = '';
+  var lat = Number(a.lat), lng = Number(a.lng);
+  if(Number.isFinite(lat) && Number.isFinite(lng) &&
+     Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat===0&&lng===0))
+    mapsUrl = 'https://www.google.com/maps?q=' + lat + ',' + lng;
+  if(!mapsUrl)
+    mapsUrl = a.mapsLink || a.mapUrl || a.locationUrl || a.googleMapsUrl || a.locationLink || '';
   if(mapsUrl)    lines.push('🗺 الموقع: '   + mapsUrl);
 
   // وصف الطلب — يبحث في الحقول بالترتيب
