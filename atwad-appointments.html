@@ -1534,13 +1534,7 @@ function editAppt(id){
     _locLng = Number(a.lng);
     document.getElementById('appointment_lat').value = a.lat;
     document.getElementById('appointment_lng').value = a.lng;
-    if(isValidCoordinates(_locLat, _locLng)) {
-      showLocPreview(_locLat, _locLng);
-      // الإحداثيات الموثقة أدق من بعض الروابط المختصرة التي قد تفتح اسم المدينة فقط.
-      document.getElementById('loc_open_btn').href = 'https://www.google.com/maps?q=' +
-        encodeURIComponent(_locLat + ',' + _locLng);
-      document.getElementById('loc_open_btn').style.display = 'inline-flex';
-    }
+    if(isValidCoordinates(_locLat, _locLng)) showLocPreview(_locLat, _locLng);
   }
   if(a.locationSource) document.getElementById('appointment_location_source').value = a.locationSource;
   if(a.locationVerified === true || a.locationVerified === 'true') {
@@ -2551,15 +2545,7 @@ function closeModal(){
 function appointmentMapsUrl(a){
   if(!a) return '';
 
-  // استخدم الإحداثيات الموثقة أولاً؛ بعض الروابط المختصرة قد تفتح اسم المدينة فقط.
-  var lat = Number(a.lat), lng = Number(a.lng);
-  if(Number.isFinite(lat) && Number.isFinite(lng) &&
-     lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 &&
-     !(lat === 0 && lng === 0)){
-    return 'https://www.google.com/maps?q=' + encodeURIComponent(lat + ',' + lng);
-  }
-
-  // استخدم رابط العميل إذا لم تتوفر إحداثيات صالحة.
+  // رابط العميل هو المرجع الأول؛ قد تكون إحداثيات السجل القديم غير صحيحة.
   var candidates = [
     a.mapsLink, a.mapLink, a.mapUrl, a.locationUrl,
     a.googleMapsUrl, a.googleMapsLink, a.locationLink
@@ -2567,6 +2553,14 @@ function appointmentMapsUrl(a){
   for(var i=0;i<candidates.length;i++){
     var link = String(candidates[i] || '').trim();
     if(/^https?:\/\//i.test(link)) return link;
+  }
+
+  // استخدم الإحداثيات فقط عند عدم وجود رابط موقع محفوظ.
+  var lat = Number(a.lat), lng = Number(a.lng);
+  if(Number.isFinite(lat) && Number.isFinite(lng) &&
+     lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 &&
+     !(lat === 0 && lng === 0)){
+    return 'https://www.google.com/maps?q=' + encodeURIComponent(lat + ',' + lng);
   }
 
   // العناوين التفصيلية القديمة فقط؛ لا تفتح مدينة جدة كاملة كموقع للعميل.
@@ -2762,14 +2756,13 @@ function buildTechnicianMessage(a) {
   var locText = a.address || a.city || '';
   if(locText)    lines.push('📍 العنوان: '  + locText);
 
-  // رابط الموقع — الإحداثيات الموثقة أولاً حتى يصل الفني إلى الموقع الدقيق.
-  var mapsUrl = '';
-  var lat = Number(a.lat), lng = Number(a.lng);
-  if(Number.isFinite(lat) && Number.isFinite(lng) &&
-     Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat===0&&lng===0))
-    mapsUrl = 'https://www.google.com/maps?q=' + lat + ',' + lng;
-  if(!mapsUrl)
-    mapsUrl = a.mapsLink || a.mapUrl || a.locationUrl || a.googleMapsUrl || a.locationLink || '';
+  // رابط الموقع الذي شاركه العميل هو المرجع الأول.
+  var mapsUrl = a.mapsLink || a.mapUrl || a.locationUrl || a.googleMapsUrl || a.locationLink || '';
+  if(!mapsUrl && a.lat && a.lng) {
+    var lat = Number(a.lat), lng = Number(a.lng);
+    if(Number.isFinite(lat) && Number.isFinite(lng) && !(lat===0&&lng===0))
+      mapsUrl = 'https://www.google.com/maps?q=' + lat + ',' + lng;
+  }
   if(mapsUrl)    lines.push('🗺 الموقع: '   + mapsUrl);
 
   // وصف الطلب — يبحث في الحقول بالترتيب
