@@ -416,7 +416,7 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
       </div>
       <div class="form-row">
         <div class="form-group"><label>اسم العميل <span class="req">*</span></label><input type="text" id="f_client" placeholder="اسم العميل" list="clientsList"><datalist id="clientsList"></datalist></div>
-        <div class="form-group"><label>جوال العميل <span class="req">*</span></label><input type="tel" id="f_phone" placeholder="05xxxxxxxx" oninput="if(this.value.length>=10) lookupCustomerByPhone(this.value.trim())"></div>
+        <div class="form-group"><label>جوال العميل <span class="req">*</span></label><input type="tel" id="f_phone" placeholder="05xxxxxxxx" inputmode="tel" autocomplete="tel" oninput="scheduleCustomerLookup(this.value)"></div>
       </div>
       <div class="form-group"><label>العنوان <span class="req">*</span></label><input type="text" id="f_address" placeholder="الحي، الشارع..."></div>
       <div class="form-row">
@@ -1737,50 +1737,101 @@ function useNewAndSave() {
 // ============================================================
 // البحث عن العميل برقم الجوال
 // ============================================================
-function lookupCustomerByPhone(phone) {
-  if(!db || !phone || phone.length < 9) return;
-  db.ref('customers').orderByChild('phone').equalTo(phone).once('value').then(function(snap) {
-    if(!snap.exists()) return;
+var customerLookupTimer = null;
+var customerLookupSerial = 0;
+
+function normalizeLookupPhone(value) {
+  var digits = String(value || '').replace(/\D/g, '');
+  if(digits.indexOf('00966') === 0) digits = digits.slice(5);
+  else if(digits.indexOf('966') === 0) digits = digits.slice(3);
+  if(digits.length === 9 && digits.charAt(0) === '5') digits = '0' + digits;
+  return digits;
+}
+
+function sameLookupPhone(a, b) {
+  var pa = normalizeLookupPhone(a);
+  var pb = normalizeLookupPhone(b);
+  return pa && pb && (pa === pb || pa.slice(-9) === pb.slice(-9));
+}
+
+function scheduleCustomerLookup(value) {
+  clearTimeout(customerLookupTimer);
+  var phone = normalizeLookupPhone(value);
+  var msg = document.getElementById('clientFoundMsg');
+  customerLookupSerial++;
+  if(!/^05\d{8}$/.test(phone)) {
+    msg.style.display = 'none';
+    return;
+  }
+  msg.textContent = '⏳ جارٍ البحث عن بيانات العميل...';
+  msg.style.display = 'block';
+  var serial = customerLookupSerial;
+  customerLookupTimer = setTimeout(function(){ lookupCustomerByPhone(phone, serial); }, 350);
+}
+
+function lookupCustomerByPhone(phone, serial) {
+  phone = normalizeLookupPhone(phone);
+  if(!db || !/^05\d{8}$/.test(phone)) return;
+  db.ref('customers').once('value').then(function(snap) {
+    if(serial && serial !== customerLookupSerial) return;
     var key = null, cust = null;
-    snap.forEach(function(c){ key = c.key; cust = c.val(); });
-    if(!cust) return;
+    snap.forEach(function(c){
+      var value = c.val() || {};
+      if(sameLookupPhone(value.phone || value.mobile || value.whatsapp, phone)) {
+        if(!cust || Number(value.updatedAt || value.createdAt || 0) >= Number(cust.updatedAt || cust.createdAt || 0)) {
+          key = c.key;
+          cust = value;
+        }
+      }
+    });
+    var foundMsg = document.getElementById('clientFoundMsg');
+    if(!cust) {
+      _foundCustomerKey = null;
+      foundMsg.textContent = 'ℹ️ الرقم غير مسجل سابقًا؛ أكمل بيانات العميل يدويًا.';
+      foundMsg.style.display = 'block';
+      return;
+    }
     _foundCustomerKey = key;
 
-    // ملء الحقول فقط إذا كانت فارغة (لا نكتب فوق ما كتبه الموظف)
-    if(!document.getElementById('f_client').value.trim() && (cust.name || cust.client)) {
-      document.getElementById('f_client').value = cust.name || cust.client;
-    }
-    if(!document.getElementById('f_address').value.trim() && cust.address) {
-      document.getElementById('f_address').value = cust.address;
-    }
+    // البحث الصريح برقم الجوال يعني أن بيانات هذا العميل هي المرجع.
+    var savedName = String(cust.name || cust.client || cust.customerName || '').trim();
+    var savedAddress = String(cust.address || cust.district || cust.city || '').trim();
+    if(savedName) document.getElementById('f_client').value = savedName;
+    if(savedAddress) document.getElementById('f_address').value = savedAddress;
 
     // موقع محفوظ؟
-    var hasLocation = isValidCoordinates(Number(cust.lat), Number(cust.lng)) || cust.mapsLink;
+    var savedLink = String(cust.mapsLink || cust.mapLink || cust.googleMapsLink || cust.locationUrl || cust.locationLink || '').trim();
+    var hasLocation = isValidCoordinates(Number(cust.lat), Number(cust.lng)) || !!savedLink;
     if(hasLocation) {
       _savedCustomerLat  = Number(cust.lat) || null;
       _savedCustomerLng  = Number(cust.lng) || null;
-      _savedCustomerLink = cust.mapsLink || '';
+      _savedCustomerLink = savedLink;
 
-      // إذا لم يكن الموظف أدخل رابطًا بعد، نملأه تلقائياً
-      if(!document.getElementById('appointment_maps_link').value.trim() && _savedCustomerLink) {
+      // استعادة موقع العميل المحفوظ تلقائيًا للحجز الجديد.
+      if(_savedCustomerLink) {
         document.getElementById('appointment_maps_link').value = _savedCustomerLink;
+        document.getElementById('loc_open_btn').href = _savedCustomerLink;
+        document.getElementById('loc_open_btn').style.display = 'inline-flex';
         if(_savedCustomerLat && _savedCustomerLng) {
           document.getElementById('appointment_lat').value = _savedCustomerLat;
           document.getElementById('appointment_lng').value = _savedCustomerLng;
           document.getElementById('appointment_location_source').value = 'maps_link';
           _locLat = _savedCustomerLat; _locLng = _savedCustomerLng; _locSource = 'maps_link';
-          document.getElementById('loc_open_btn').href = _savedCustomerLink;
-          document.getElementById('loc_open_btn').style.display = 'inline-flex';
           showLocPreview(_locLat, _locLng);
         }
       }
     }
 
-    var foundMsg = document.getElementById('clientFoundMsg');
-    foundMsg.textContent = '✅ تم العثور على العميل وملء بياناته السابقة.' + (hasLocation ? ' (لديه موقع محفوظ)' : '');
+    var restored = [savedName && 'الاسم', savedAddress && 'العنوان', hasLocation && 'الموقع'].filter(Boolean);
+    foundMsg.textContent = '✅ تم العثور على العميل وتعبئة ' + (restored.length ? restored.join(' و') : 'بياناته السابقة') + '.';
     foundMsg.style.display = 'block';
     document.getElementById('loc_save_row').style.display = 'flex';
-  }).catch(function(e){ console.error('lookup customer:', e); });
+  }).catch(function(e){
+    console.error('lookup customer:', e);
+    var foundMsg = document.getElementById('clientFoundMsg');
+    foundMsg.textContent = '⚠️ تعذر استرجاع بيانات العميل الآن؛ يمكنك إدخالها يدويًا.';
+    foundMsg.style.display = 'block';
+  });
 }
 
 // إعادة تعيين حقول الموقع عند فتح نافذة موعد جديد/تعديل
@@ -2563,15 +2614,67 @@ function appointmentMapsUrl(a){
     return 'https://www.google.com/maps?q=' + encodeURIComponent(lat + ',' + lng);
   }
 
-  // العناوين التفصيلية القديمة فقط؛ لا تفتح مدينة جدة كاملة كموقع للعميل.
-  var address = String(a.address || '').trim();
-  var generic = address.toLowerCase().replace(/\s+/g,'');
-  var genericAddresses = ['', 'جدة', 'jeddah', 'jeddah/جدة', 'جدة/jeddah'];
-  if(genericAddresses.indexOf(generic) === -1){
-    return 'https://www.google.com/maps/search/?api=1&query=' +
-      encodeURIComponent(address + '، المملكة العربية السعودية');
+  // لا نحوّل العنوان النصي إلى خريطة؛ المطلوب موقع دقيق فقط.
+  return '';
+}
+
+function normalizeLocationPhone(value){
+  var digits = String(value || '').replace(/\D/g,'');
+  if(digits.indexOf('00966') === 0) digits = digits.slice(5);
+  else if(digits.indexOf('966') === 0) digits = digits.slice(3);
+  if(digits.indexOf('0') === 0) digits = digits.slice(1);
+  return digits.slice(-9);
+}
+
+function customerExactMapsUrl(customer){
+  if(!customer) return '';
+  var fields = [
+    customer.mapsLink, customer.mapLink, customer.mapUrl,
+    customer.locationUrl, customer.googleMapsUrl,
+    customer.googleMapsLink, customer.locationLink
+  ];
+  for(var i=0;i<fields.length;i++){
+    var link = String(fields[i] || '').trim();
+    if(/^https?:\/\//i.test(link)) return link;
+  }
+  var lat = Number(customer.lat), lng = Number(customer.lng);
+  if(isValidCoordinates(lat,lng)){
+    return 'https://www.google.com/maps?q=' + encodeURIComponent(lat+','+lng);
   }
   return '';
+}
+
+// يفتح رابط الموعد الدقيق، أو يستعيد رابط العميل من قاعدة العملاء برقم الجوال.
+// لا يوجد أي رجوع إلى بحث "جدة" أو إلى عنوان عام.
+function openExactAppointmentLocation(id){
+  var a = findAppt(id);
+  if(!a) return;
+  var direct = appointmentMapsUrl(a);
+  if(direct){ window.open(direct,'_blank','noopener'); return; }
+  if(!db){ showToast('⚠️ لا يوجد رابط موقع دقيق لهذا الموعد'); return; }
+
+  var wantedPhone = normalizeLocationPhone(a.phone);
+  if(!wantedPhone){ showToast('⚠️ لا يوجد رابط موقع دقيق أو رقم عميل صالح'); return; }
+  showToast('🔎 جارٍ استرجاع موقع العميل...');
+  db.ref('customers').once('value').then(function(snap){
+    var exact = '';
+    snap.forEach(function(child){
+      if(exact) return;
+      var customer = child.val() || {};
+      if(normalizeLocationPhone(customer.phone || customer.mobile || customer.whatsapp) === wantedPhone){
+        exact = customerExactMapsUrl(customer);
+      }
+    });
+    if(exact){
+      a.mapsLink = exact;
+      window.open(exact,'_blank','noopener');
+    } else {
+      showToast('⚠️ لا يوجد رابط موقع دقيق محفوظ لهذا العميل');
+    }
+  }).catch(function(err){
+    console.error('customer map lookup:',err);
+    showToast('❌ تعذر استرجاع موقع العميل');
+  });
 }
 
 function openDetail(id){
@@ -2604,9 +2707,7 @@ function openDetail(id){
         ? `<button onclick="sendToTechnician('${aId}')" style="flex:1;padding:10px;background:#7C3AED;color:#fff;border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:100px;">📤 إرسال للفني</button>
            <button onclick="copyTaskMessage('${aId}')" style="flex:1;padding:10px;background:#F3F4F6;color:#374151;border:1px solid #D1D5DB;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:100px;">📋 نسخ المهمة</button>`
         : `<button disabled style="flex:1;padding:10px;background:#E9D5FF;color:#A78BFA;border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:not-allowed;min-width:100px;" title="عيّن فنيًا أولًا">📤 إرسال للفني</button>`}
-      ${detailMapsUrl
-        ? `<a href="${atwadEsc(detailMapsUrl)}" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;padding:10px;background:var(--ice);color:var(--sky);border-radius:9px;font-weight:700;text-decoration:none;font-size:13px;min-width:100px;">🗺️ خرائط</a>`
-        : `<button type="button" disabled title="لا يوجد رابط أو إحداثيات دقيقة لهذا الموعد" style="flex:1;padding:10px;background:#F1F5F9;color:#94A3B8;border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:not-allowed;min-width:100px;">🗺️ لا يوجد موقع دقيق</button>`}
+      <button type="button" onclick="openExactAppointmentLocation('${aId}')" title="فتح رابط العميل الدقيق أو استرجاعه من ملف العميل" style="flex:1;padding:10px;background:${detailMapsUrl?'var(--ice)':'#FEF3C7'};color:${detailMapsUrl?'var(--sky)':'#92400E'};border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:100px;">${detailMapsUrl?'🗺️ خرائط':'🔎 استرجاع الموقع'}</button>
       ${a.status!=='done'?`<button onclick="markDone('${aId}');document.getElementById('detailModal').classList.remove('open')" style="flex:1;padding:10px;background:#D1FAE5;color:var(--success);border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:80px;">✓ إتمام</button>`:''}
       <button onclick="deleteAppt('${aId}',null);document.getElementById('detailModal').classList.remove('open')" style="flex:1;padding:10px;background:#FEE2E2;color:#EF4444;border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:80px;">🗑️ حذف</button>
     </div>`;
