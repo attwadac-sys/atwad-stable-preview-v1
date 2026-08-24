@@ -1583,6 +1583,7 @@ function sendWhatsAppConfirmation(appt) {
 var _locLat = null, _locLng = null, _locSource = '';
 var _foundCustomerKey = null; // مفتاح Firebase للعميل الموجود
 var _savedCustomerLat = null, _savedCustomerLng = null, _savedCustomerLink = '';
+var _savedCustomerAddress = ''; // العنوان الموثوق المسترجع من ملف العميل
 
 // التحقق من صحة الإحداثيات
 function isValidCoordinates(lat, lng) {
@@ -1760,6 +1761,8 @@ function scheduleCustomerLookup(value) {
   var msg = document.getElementById('clientFoundMsg');
   customerLookupSerial++;
   if(!/^05\d{8}$/.test(phone)) {
+    _foundCustomerKey = null;
+    _savedCustomerAddress = '';
     msg.style.display = 'none';
     return;
   }
@@ -1787,6 +1790,7 @@ function lookupCustomerByPhone(phone, serial) {
     var foundMsg = document.getElementById('clientFoundMsg');
     if(!cust) {
       _foundCustomerKey = null;
+      _savedCustomerAddress = '';
       foundMsg.textContent = 'ℹ️ الرقم غير مسجل سابقًا؛ أكمل بيانات العميل يدويًا.';
       foundMsg.style.display = 'block';
       return;
@@ -1796,8 +1800,18 @@ function lookupCustomerByPhone(phone, serial) {
     // البحث الصريح برقم الجوال يعني أن بيانات هذا العميل هي المرجع.
     var savedName = String(cust.name || cust.client || cust.customerName || '').trim();
     var savedAddress = String(cust.address || cust.district || cust.city || '').trim();
+    _savedCustomerAddress = savedAddress;
     if(savedName) document.getElementById('f_client').value = savedName;
-    if(savedAddress) document.getElementById('f_address').value = savedAddress;
+    if(savedAddress) {
+      document.getElementById('f_address').value = savedAddress;
+      // البحث الصريح بالجوال استرجع عنوانًا موثوقًا؛ اعتمده بدل قيمة الحي الأولية
+      // حتى لا يضطر الموظف لإلغاء الموعد والبدء من جديد.
+      if(manualAreaApproved && !editingFirebaseKey) {
+        manualAreaDistrict = savedAddress;
+        var approvedDistrictEl = document.getElementById('areaApprovedDistrict');
+        if(approvedDistrictEl) approvedDistrictEl.textContent = savedAddress;
+      }
+    }
 
     // موقع محفوظ؟
     var savedLink = String(cust.mapsLink || cust.mapLink || cust.googleMapsLink || cust.locationUrl || cust.locationLink || '').trim();
@@ -1839,6 +1853,7 @@ function resetLocFields() {
   _locLat = null; _locLng = null; _locSource = '';
   _foundCustomerKey = null;
   _savedCustomerLat = null; _savedCustomerLng = null; _savedCustomerLink = '';
+  _savedCustomerAddress = '';
   document.getElementById('appointment_maps_link').value = '';
   document.getElementById('appointment_lat').value = '';
   document.getElementById('appointment_lng').value = '';
@@ -2081,7 +2096,13 @@ function saveAppt(){
     var checkedDistrict = normalizeArabicArea(manualAreaDistrict);
     var currentAddress = normalizeArabicArea(address);
     if(!address || !currentAddress.includes(checkedDistrict)) {
-      return showToast('❌ تم تغيير الحي بعد التحقق. ألغِ الموعد وابدأ الحجز من جديد للتحقق من النطاق');
+      var trustedSavedAddress = normalizeArabicArea(_savedCustomerAddress);
+      if(_foundCustomerKey && trustedSavedAddress && currentAddress === trustedSavedAddress) {
+        // العنوان تغيّر بسبب التعبئة التلقائية من ملف العميل، وليس بتجاوز يدوي.
+        manualAreaDistrict = address;
+      } else {
+        return showToast('❌ العنوان مختلف عن النطاق الذي تم التحقق منه. تحقّق من الحي قبل الحفظ.');
+      }
     }
   }
 
