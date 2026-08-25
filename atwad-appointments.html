@@ -2624,6 +2624,21 @@ function closeModal(){
 }
 
 // ===== DETAIL =====
+function isGenericCityMapsUrl(value){
+  var raw = String(value || '').trim();
+  if(!raw) return false;
+  var decoded = raw;
+  try { decoded = decodeURIComponent(raw); } catch(e) {}
+  decoded = decoded.replace(/\+/g,' ').toLowerCase();
+
+  // روابط صفحة مدينة جدة أو البحث عن جدة ليست موقع عميل دقيقًا.
+  var cityPlace = /\/maps\/(?:place|search)\/(?:جدة|jeddah)(?:\/|@|\?|$)/i.test(decoded);
+  var cityQuery = /[?&](?:q|query|destination)=(?:جدة|jeddah)(?:&|$)/i.test(decoded);
+  // Google Maps يضع أحيانًا مقياسًا بعشرات الكيلومترات في رابط المدينة العام.
+  var veryWideView = /,\d{5,}m(?:\/|$)/i.test(decoded);
+  return cityPlace || cityQuery || veryWideView;
+}
+
 function appointmentMapsUrl(a){
   if(!a) return '';
 
@@ -2632,10 +2647,19 @@ function appointmentMapsUrl(a){
     a.mapsLink, a.mapLink, a.mapUrl, a.locationUrl,
     a.googleMapsUrl, a.googleMapsLink, a.locationLink
   ];
+  var rejectedGenericMap = false;
   for(var i=0;i<candidates.length;i++){
     var link = String(candidates[i] || '').trim();
-    if(/^https?:\/\//i.test(link)) return link;
+    if(!/^https?:\/\//i.test(link)) continue;
+    if(isGenericCityMapsUrl(link)) {
+      rejectedGenericMap = true;
+      continue;
+    }
+    return link;
   }
+
+  // لا نستخدم إحداثيات مأخوذة من رابط مدينة عام؛ فهي مركز الخريطة وليست منزل العميل.
+  if(rejectedGenericMap) return '';
 
   // استخدم الإحداثيات فقط عند عدم وجود رابط موقع محفوظ.
   var lat = Number(a.lat), lng = Number(a.lng);
@@ -2664,10 +2688,17 @@ function customerExactMapsUrl(customer){
     customer.locationUrl, customer.googleMapsUrl,
     customer.googleMapsLink, customer.locationLink
   ];
+  var rejectedGenericMap = false;
   for(var i=0;i<fields.length;i++){
     var link = String(fields[i] || '').trim();
-    if(/^https?:\/\//i.test(link)) return link;
+    if(!/^https?:\/\//i.test(link)) continue;
+    if(isGenericCityMapsUrl(link)) {
+      rejectedGenericMap = true;
+      continue;
+    }
+    return link;
   }
+  if(rejectedGenericMap) return '';
   var lat = Number(customer.lat), lng = Number(customer.lng);
   if(isValidCoordinates(lat,lng)){
     return 'https://www.google.com/maps?q=' + encodeURIComponent(lat+','+lng);
@@ -2896,7 +2927,7 @@ function buildTechnicianMessage(a) {
 
   // الموقع النصي
   var locText = a.address || a.city || '';
-  if(locText)    lines.push('📍 العنوان: '  + locText);
+  if(locText)    lines.push('📍 المدينة/الحي: '  + locText);
 
   // رابط الموقع الذي شاركه العميل هو المرجع الأول.
   var mapsUrl = appointmentMapsUrl(a);
