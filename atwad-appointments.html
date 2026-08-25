@@ -91,6 +91,10 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
 .appt-client{font-size:14px;font-weight:700;color:var(--deep);}
 .appt-service{font-size:12px;color:var(--mist);margin-top:2px;}
 .appt-address{font-size:12px;color:var(--sky);margin-top:2px;}
+.appt-location-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:4px;}
+.appt-location-btn{border:0;border-radius:7px;background:#E0F2FE;color:#0369A1;padding:5px 9px;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:800;cursor:pointer;}
+.appt-location-btn.lookup{background:#FEF3C7;color:#92400E;}
+.appt-location-city{font-size:11px;color:var(--mist);}
 .tech-pill{padding:3px 10px;border-radius:20px;background:var(--frost);color:var(--steel);font-size:11px;font-weight:600;}
 .status-pill{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;}
 .sp-confirmed{background:#DBEAFE;color:#1E40AF;}
@@ -1139,7 +1143,8 @@ function initFirebaseSync() {
           id: 'B_' + child.key,
           client: b.client || b.name || '—',
           phone: b.phone || '',
-          address: b.city || 'جدة',
+          city: b.city || 'جدة',
+          address: b.address || b.district || b.city || 'جدة',
           service: b.service || 'تنظيف مكيف',
           units: b.units || 1,
           date: b.date,
@@ -1269,13 +1274,18 @@ function renderList(){
       const tc = TECH_COLORS[a.tech]||'#0EA5E9';
       const isBooking = a._source === 'bookings';
       const sv = atwadStatusView(a);
+      const cardMapsUrl = appointmentMapsUrl(a);
+      const cardCity = a.city || a.address || '';
       html += `<div class="appt-card ${sv.card}" onclick="openDetail('${aId}')">
         <div class="appt-time-block"><div class="t-start">${a.time||'--:--'}</div><div class="t-dur">${a.duration||60} دق</div></div>
         <div class="appt-divider"></div>
         <div class="appt-info">
           <div class="appt-client">${a.client}</div>
           <div class="appt-service">🛠️ ${a.service||'—'} ${a.units>1?'('+a.units+' وحدات)':''}</div>
-          <div class="appt-address">📍 ${a.address||'—'}</div>
+          <div class="appt-location-row">
+            <button type="button" class="appt-location-btn ${cardMapsUrl?'':'lookup'}" onclick="event.stopPropagation();openExactAppointmentLocation('${aId}')">${cardMapsUrl?'🗺️ فتح موقع العميل':'🔎 استرجاع موقع العميل'}</button>
+            ${cardCity?`<span class="appt-location-city">المدينة: ${atwadEsc(cardCity)}</span>`:''}
+          </div>
           ${isBooking?'<span class="source-badge source-firebase">📱 حجز إلكتروني</span>':'<span class="source-badge source-local">✏️ يدوي</span>'}
           ${renderConflictBadge(a)}
           ${renderTechnicianNotificationBadge(a)}
@@ -2665,19 +2675,17 @@ function customerExactMapsUrl(customer){
   return '';
 }
 
-// يفتح رابط الموعد الدقيق، أو يستعيد رابط العميل من قاعدة العملاء برقم الجوال.
-// لا يوجد أي رجوع إلى بحث "جدة" أو إلى عنوان عام.
-function openExactAppointmentLocation(id){
-  var a = findAppt(id);
-  if(!a) return;
+// يعيد رابط الموعد مباشرة، أو يبحث عنه في ملف العميل باستخدام رقم الجوال.
+// تُستخدم الدالة نفسها في العرض ورسالة الفني حتى لا يظهر اسم المدينة بدل الموقع.
+function resolveExactAppointmentLocation(a){
   var direct = appointmentMapsUrl(a);
-  if(direct){ window.open(direct,'_blank','noopener'); return; }
-  if(!db){ showToast('⚠️ لا يوجد رابط موقع دقيق لهذا الموعد'); return; }
+  if(direct) return Promise.resolve(direct);
+  if(!db || !a) return Promise.resolve('');
 
   var wantedPhone = normalizeLocationPhone(a.phone);
-  if(!wantedPhone){ showToast('⚠️ لا يوجد رابط موقع دقيق أو رقم عميل صالح'); return; }
-  showToast('🔎 جارٍ استرجاع موقع العميل...');
-  db.ref('customers').once('value').then(function(snap){
+  if(!wantedPhone) return Promise.resolve('');
+
+  return db.ref('customers').once('value').then(function(snap){
     var exact = '';
     snap.forEach(function(child){
       if(exact) return;
@@ -2686,8 +2694,19 @@ function openExactAppointmentLocation(id){
         exact = customerExactMapsUrl(customer);
       }
     });
+    if(exact) a.mapsLink = exact;
+    return exact;
+  });
+}
+
+// يفتح رابط الموعد الدقيق، أو يستعيد رابط العميل من قاعدة العملاء برقم الجوال.
+// لا يوجد أي رجوع إلى بحث "جدة" أو إلى عنوان عام.
+function openExactAppointmentLocation(id){
+  var a = findAppt(id);
+  if(!a) return;
+  if(!appointmentMapsUrl(a)) showToast('🔎 جارٍ استرجاع موقع العميل...');
+  resolveExactAppointmentLocation(a).then(function(exact){
     if(exact){
-      a.mapsLink = exact;
       window.open(exact,'_blank','noopener');
     } else {
       showToast('⚠️ لا يوجد رابط موقع دقيق محفوظ لهذا العميل');
@@ -2705,6 +2724,7 @@ function openDetail(id){
   const dsv=atwadStatusView(a);
   const aId = a.id || a._fbKey;
   const detailMapsUrl = appointmentMapsUrl(a);
+  const detailCity = a.city || a.address || '';
   document.getElementById('detailTitle').textContent='📋 ' + a.client;
   document.getElementById('detailEditBtn').onclick=()=>editAppt(aId);
   document.getElementById('detailBody').innerHTML=`
@@ -2716,7 +2736,7 @@ function openDetail(id){
       <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">🛠️ الخدمة</div><div style="font-weight:700;color:var(--deep)">${a.service||'—'}</div><div style="font-size:12px;color:var(--mist)">${a.units||1} وحدة</div></div>
       <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">📅 الموعد</div><div style="font-weight:700;color:var(--deep)">${formatDateShort(a.date)}</div><div style="font-size:12px;color:var(--mist)">⏰ ${a.time||'—'}</div></div>
       <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">👷 الفني</div><div style="font-weight:700;color:${tc}">${TECHS[a.tech]||a.tech||'—'}</div></div>
-      <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">📍 الموقع</div><div style="font-weight:700;color:var(--deep);font-size:12px">${a.address||'—'}</div></div>
+      <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:6px;">📍 موقع العميل</div><button type="button" onclick="openExactAppointmentLocation('${aId}')" style="width:100%;padding:7px;background:${detailMapsUrl?'#E0F2FE':'#FEF3C7'};color:${detailMapsUrl?'#0369A1':'#92400E'};border:0;border-radius:7px;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:800;cursor:pointer;">${detailMapsUrl?'🗺️ فتح في خرائط Google':'🔎 استرجاع الموقع المحفوظ'}</button>${detailCity?`<div style="font-size:11px;color:var(--mist);margin-top:6px;">المدينة: ${atwadEsc(detailCity)}</div>`:''}</div>
     </div>
     ${renderTechnicianNotificationBadge(a)?`<div style="margin-bottom:12px;">${renderTechnicianNotificationBadge(a)}</div>`:''}
     ${a.notes?`<div style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;color:#92400E;">📝 ${a.notes}</div>`:''}
@@ -2879,12 +2899,7 @@ function buildTechnicianMessage(a) {
   if(locText)    lines.push('📍 العنوان: '  + locText);
 
   // رابط الموقع الذي شاركه العميل هو المرجع الأول.
-  var mapsUrl = a.mapsLink || a.mapUrl || a.locationUrl || a.googleMapsUrl || a.locationLink || '';
-  if(!mapsUrl && a.lat && a.lng) {
-    var lat = Number(a.lat), lng = Number(a.lng);
-    if(Number.isFinite(lat) && Number.isFinite(lng) && !(lat===0&&lng===0))
-      mapsUrl = 'https://www.google.com/maps?q=' + lat + ',' + lng;
-  }
+  var mapsUrl = appointmentMapsUrl(a);
   if(mapsUrl)    lines.push('🗺 الموقع: '   + mapsUrl);
 
   // وصف الطلب — يبحث في الحقول بالترتيب
@@ -2931,7 +2946,7 @@ var pendingTechApptId        = '';
 // ============================================================
 // sendToTechnician — ينسخ الرسالة تلقائياً ثم يفتح النافذة
 // ============================================================
-function sendToTechnician(id) {
+async function sendToTechnician(id) {
   var a = findAppt(id);
   if(!a) return;
 
@@ -2943,6 +2958,14 @@ function sendToTechnician(id) {
   if(!phone) {
     showToast('⚠️ لا يوجد رقم واتساب محفوظ لهذا الفني');
     return;
+  }
+
+  // الموعد القديم قد لا يحمل الرابط داخله، مع أنه محفوظ في ملف العميل.
+  // استرجعه قبل بناء الرسالة حتى يصل الموقع الحقيقي إلى الفني.
+  if(!appointmentMapsUrl(a)) {
+    showToast('🔎 جارٍ استرجاع موقع العميل قبل الإرسال...');
+    try { await resolveExactAppointmentLocation(a); }
+    catch(e) { console.error('technician location lookup:', e); }
   }
 
   var msg      = buildTechnicianMessage(a);
@@ -3057,9 +3080,14 @@ function closeTechSendModal() {
 // ============================================================
 // copyTaskMessage — نسخ رسالة المهمة إلى الحافظة
 // ============================================================
-function copyTaskMessage(id) {
+async function copyTaskMessage(id) {
   var a = findAppt(id);
   if(!a) return;
+  if(!appointmentMapsUrl(a)) {
+    showToast('🔎 جارٍ استرجاع موقع العميل قبل النسخ...');
+    try { await resolveExactAppointmentLocation(a); }
+    catch(e) { console.error('copy location lookup:', e); }
+  }
   var msg = buildTechnicianMessage(a);
   if(navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(msg).then(function(){
