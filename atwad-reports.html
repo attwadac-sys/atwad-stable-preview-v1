@@ -319,12 +319,33 @@ function renderRevChart() {
   }).join('');
 }
 
+// ===== SERVICE NAME NORMALIZATION =====
+// توحيد أسماء الخدمة في التقارير فقط؛ لا يغيّر سجلات أوامر العمل الأصلية.
+function normalizeServiceName(raw) {
+  var original = String(raw || '').trim().replace(/\s+/g,' ');
+  if(!original) return 'أخرى';
+
+  var normalized = original
+    .replace(/ـ/g,'')
+    .replace(/[\u064B-\u065F\u0670]/g,'')
+    .replace(/[أإآ]/g,'ا')
+    .toLowerCase();
+
+  var mentionsCleaning = normalized.indexOf('تنظيف') !== -1 || normalized.indexOf('غسيل') !== -1;
+  var mentionsAC = normalized.indexOf('مكيف') !== -1 || normalized.indexOf('مكيفات') !== -1;
+  if((mentionsCleaning && mentionsAC) || normalized === 'تنظيف' || normalized === 'غسيل') {
+    return 'غسيل مكيفات';
+  }
+
+  return original;
+}
+
 // ===== SERVICES CHART =====
 function renderSvcChart() {
   var wo = filterByPeriod(workOrders, 'date');
   var svcCount = {};
   var svcColors = ['#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899'];
-  wo.forEach(function(w){ var s=w.service||'أخرى'; svcCount[s]=(svcCount[s]||0)+1; });
+  wo.forEach(function(w){ var s=normalizeServiceName(w.service); svcCount[s]=(svcCount[s]||0)+1; });
   var total = wo.length || 1;
   var items = Object.entries(svcCount).sort(function(a,b){return b[1]-a[1];}).slice(0,5);
 
@@ -365,7 +386,7 @@ function renderSvcTable() {
   var wo = filterByPeriod(workOrders, 'date');
   var svcData = {};
   wo.forEach(function(w){
-    var s=w.service||'أخرى';
+    var s=normalizeServiceName(w.service);
     if(!svcData[s]) svcData[s]={count:0,rev:0};
     svcData[s].count++;
     svcData[s].rev+=parseFloat(w.total)||0;
