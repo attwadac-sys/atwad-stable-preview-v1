@@ -471,11 +471,14 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
 
       <!-- قسم موقع العميل -->
       <div class="loc-section">
-        <div class="loc-section-title">📍 موقع العميل</div>
+        <div class="loc-section-title">📍 موقع العميل الدقيق <span class="req">*</span></div>
+        <div style="font-size:11px;color:var(--mist);line-height:1.7;margin-bottom:8px;">
+          يجب أن يحتوي الرابط على إحداثيات المنزل. لا يُقبل اسم المدينة أو رابط مختصر بلا إحداثيات.
+        </div>
         <div class="loc-input-row">
-          <input type="url" id="appointment_maps_link" placeholder="https://maps.app.goo.gl/..." autocomplete="off">
+          <input type="text" id="appointment_maps_link" placeholder="https://www.google.com/maps?q=21.123,39.123" autocomplete="off" inputmode="url">
           <button type="button" class="loc-btn loc-btn-verify" onclick="verifyApptLocation()">🗺️ التحقق من الرابط</button>
-          <a class="loc-btn loc-btn-open" id="loc_open_btn" href="#" target="_blank">فتح الموقع</a>
+          <a class="loc-btn loc-btn-open" id="loc_open_btn" href="#" target="_blank" rel="noopener">فتح الدبوس</a>
         </div>
         <div class="loc-msg" id="loc_msg"></div>
         <!-- معاينة خريطة — تظهر فقط عند إحداثيات صالحة -->
@@ -483,7 +486,7 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
           <iframe id="loc_preview_map" src="about:blank" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
           <p class="loc-preview-note">يرجى التأكد أن العلامة على موقع العميل الصحيح.</p>
           <label class="loc-chk-row">
-            <input type="checkbox" id="chk_loc_verified">
+            <input type="checkbox" id="chk_loc_verified" onchange="syncApptLocationConfirmation(this)">
             <span>تم التأكد من أن الموقع صحيح</span>
           </label>
         </div>
@@ -1158,9 +1161,10 @@ function initFirebaseSync() {
           sourceBookingKey: child.key,
           createdAt: b.createdAt || '',
           // حقول الموقع — تُنسخ من الحجز الأصلي
-          mapsLink:        b.mapsLink || b.mapLink || b.mapUrl || b.location || b.locationUrl || b.googleMapsUrl || b.googleMapsLink || b.locationLink || '',
-          lat:             b.lat  != null ? b.lat  : '',
-          lng:             b.lng  != null ? b.lng  : '',
+          // location قد يحتوي اسم المدينة فقط؛ لا ننسخه إلى mapsLink.
+          mapsLink:        b.mapsLink || b.mapLink || b.mapUrl || b.mapsUrl || b.locationUrl || b.googleMapsUrl || b.googleMapsLink || b.locationLink || b.customerLocation || b.addressUrl || '',
+          lat:             b.lat  != null ? b.lat  : (b.latitude != null ? b.latitude : ''),
+          lng:             b.lng  != null ? b.lng  : (b.longitude != null ? b.longitude : ''),
           locationImage:   b.locationImage   || '',
           locationVerified:b.locationVerified || false,
           locationSource:  b.locationSource  || ''
@@ -1275,7 +1279,7 @@ function renderList(){
       const isBooking = a._source === 'bookings';
       const sv = atwadStatusView(a);
       const cardMapsUrl = appointmentMapsUrl(a);
-      const cardCity = a.city || a.address || '';
+      const cardCity = a.address || a.district || a.city || '';
       html += `<div class="appt-card ${sv.card}" onclick="openDetail('${aId}')">
         <div class="appt-time-block"><div class="t-start">${a.time||'--:--'}</div><div class="t-dur">${a.duration||60} دق</div></div>
         <div class="appt-divider"></div>
@@ -1283,8 +1287,8 @@ function renderList(){
           <div class="appt-client">${a.client}</div>
           <div class="appt-service">🛠️ ${a.service||'—'} ${a.units>1?'('+a.units+' وحدات)':''}</div>
           <div class="appt-location-row">
-            <button type="button" class="appt-location-btn ${cardMapsUrl?'':'lookup'}" onclick="event.stopPropagation();openExactAppointmentLocation('${aId}')">${cardMapsUrl?'🗺️ فتح موقع العميل':'🔎 استرجاع موقع العميل'}</button>
-            ${cardCity?`<span class="appt-location-city">المدينة: ${atwadEsc(cardCity)}</span>`:''}
+            <button type="button" class="appt-location-btn ${cardMapsUrl?'':'lookup'}" onclick="event.stopPropagation();openExactAppointmentLocation('${aId}')">${cardMapsUrl?'🗺️ فتح دبوس العميل':'⚠️ تحديث الموقع الدقيق'}</button>
+            ${cardCity?`<span class="appt-location-city">العنوان: ${atwadEsc(cardCity)}</span>`:''}
           </div>
           ${isBooking?'<span class="source-badge source-firebase">📱 حجز إلكتروني</span>':'<span class="source-badge source-local">✏️ يدوي</span>'}
           ${renderConflictBadge(a)}
@@ -1513,8 +1517,9 @@ function editAppt(id){
   loadImageInModal(a.locationImage||'');
   // استعادة حقول الموقع — resetLocFields أولاً ثم نُعيد تعبئة بيانات الموعد
   resetLocFields();
-  // دعم حقل mapsLink والحقول القديمة location/mapLink
-  var savedLink = a.mapsLink || a.mapLink || a.location || a.locationUrl || a.googleMapsUrl || a.locationLink || '';
+  // لا نضع في الحقل إلا دبوسًا يمكن إثبات إحداثياته.
+  // قيم مثل «جدة» والروابط المختصرة/العامة تبقى مرفوضة حتى لا تصل إلى الفني.
+  var savedLink = appointmentMapsUrl(a);
 
   // تسجيل تشخيصي مؤقت
   console.log('[editAppt] location debug:', {
@@ -1526,7 +1531,7 @@ function editAppt(id){
     locationUrl: a.locationUrl,
     googleMapsUrl: a.googleMapsUrl,
     locationLink: a.locationLink,
-    resolvedLink: savedLink,
+    exactResolvedLink: savedLink,
     lat: a.lat, lng: a.lng
   });
 
@@ -1534,17 +1539,19 @@ function editAppt(id){
     document.getElementById('appointment_maps_link').value = savedLink;
     document.getElementById('loc_open_btn').href = savedLink;
     document.getElementById('loc_open_btn').style.display = 'inline-flex';
-    console.log('[editAppt] mapsLink set from field →', savedLink);
+    console.log('[editAppt] exact mapsLink →', savedLink);
   } else {
-    console.warn('[editAppt] no mapsLink found for', a.id || a._fbKey);
+    showLocMsg('err','الموقع القديم غير دقيق أو لا يحتوي إحداثيات. أدخل دبوس المنزل ثم اضغط «التحقق من الرابط».');
+    console.warn('[editAppt] no exact coordinates for', a.id || a._fbKey);
   }
-  // استعادة الإحداثيات — سواء كانت صالحة أم لا نحافظ على القيم
-  if(a.lat != null && a.lng != null) {
-    _locLat = Number(a.lat);
-    _locLng = Number(a.lng);
-    document.getElementById('appointment_lat').value = a.lat;
-    document.getElementById('appointment_lng').value = a.lng;
-    if(isValidCoordinates(_locLat, _locLng)) showLocPreview(_locLat, _locLng);
+  // استعادة الإحداثيات الموثوقة فقط، سواء كانت مباشرة أو داخل رابط دقيق.
+  var savedCoords = exactCoordinatesFromRecord(a);
+  if(savedCoords) {
+    _locLat = savedCoords.lat;
+    _locLng = savedCoords.lng;
+    document.getElementById('appointment_lat').value = savedCoords.lat;
+    document.getElementById('appointment_lng').value = savedCoords.lng;
+    showLocPreview(_locLat, _locLng);
   }
   if(a.locationSource) document.getElementById('appointment_location_source').value = a.locationSource;
   if(a.locationVerified === true || a.locationVerified === 'true') {
@@ -1604,13 +1611,21 @@ function isValidCoordinates(lat, lng) {
 
 // ============================================================
 // extractCoordinatesFromMapUrl
-// الأولوية: !3d!4d → ?q/?query= → @lat,lng
-// روابط goo.gl/maps.app.goo.gl: تُقبل لكن لا إحداثيات
+// لا يعيد إلا إحداثيات دبوس صريحة. @lat,lng هو مركز عرض الخريطة وقد يكون
+// مركز جدة، لذلك لا يُعتمد نهائيًا كموقع عميل.
 // ============================================================
 function extractCoordinatesFromMapUrl(url) {
   if(!url || typeof url !== 'string') return null;
   var s = url.trim();
   if(s.indexOf('maps.app.goo.gl') !== -1 || s.indexOf('goo.gl/maps') !== -1) return null;
+  try { s = decodeURIComponent(s); } catch(e) {}
+
+  // يقبل أيضًا لصق "LAT,LNG" مباشرة.
+  var rawPair = s.match(/^\s*(-?\d+(?:\.\d+)?)\s*[,،]\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if(rawPair) {
+    var rawLat = Number(rawPair[1]), rawLng = Number(rawPair[2]);
+    if(isValidCoordinates(rawLat,rawLng)) return {lat:rawLat,lng:rawLng,source:'manual_coordinates'};
+  }
 
   // 1. !3dLAT!4dLNG — الموقع الفعلي للمكان
   var placeMatch = s.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
@@ -1618,19 +1633,42 @@ function extractCoordinatesFromMapUrl(url) {
     var lat = Number(placeMatch[1]), lng = Number(placeMatch[2]);
     if(isValidCoordinates(lat,lng)) return {lat:lat,lng:lng,source:'place_coordinates'};
   }
-  // 2. ?q= أو ?query=
-  var qm = s.match(/[?&](?:q|query)=([-\d.]+),([-\d.]+)/);
+  // 2. q/query/destination/ll بإحداثيات صريحة
+  var qm = s.match(/[?&](?:q|query|destination|ll)=\s*(-?\d+(?:\.\d+)?)\s*[,،]\s*(-?\d+(?:\.\d+)?)/i);
   if(qm) {
     var lat2 = Number(qm[1]), lng2 = Number(qm[2]);
     if(isValidCoordinates(lat2,lng2)) return {lat:lat2,lng:lng2,source:'query_coordinates'};
   }
-  // 3. @LAT,LNG — مركز العرض فقط
-  var am = s.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
-  if(am) {
-    var lat3 = Number(am[1]), lng3 = Number(am[2]);
-    if(isValidCoordinates(lat3,lng3)) return {lat:lat3,lng:lng3,source:'viewport_coordinates'};
-  }
   return null;
+}
+
+function canonicalExactMapsUrl(lat,lng) {
+  if(!isValidCoordinates(Number(lat),Number(lng))) return '';
+  return 'https://www.google.com/maps/dir/?api=1&destination=' +
+    encodeURIComponent(Number(lat) + ',' + Number(lng));
+}
+
+function syncApptLocationConfirmation(checkbox) {
+  var ok = !!(checkbox && checkbox.checked &&
+    isValidCoordinates(Number(document.getElementById('appointment_lat').value),
+                       Number(document.getElementById('appointment_lng').value)));
+  document.getElementById('appointment_location_verified').value = ok ? 'true' : 'false';
+  if(checkbox && checkbox.checked && !ok) {
+    checkbox.checked = false;
+    showLocMsg('err','تحقق من رابط الدبوس أولاً قبل تأكيد الموقع.');
+  }
+}
+
+function readAppointmentFormExactLocation() {
+  var link = String(document.getElementById('appointment_maps_link').value || '').trim();
+  var lat = Number(document.getElementById('appointment_lat').value);
+  var lng = Number(document.getElementById('appointment_lng').value);
+  if(!isValidCoordinates(lat,lng)) {
+    var extracted = extractCoordinatesFromMapUrl(link);
+    if(extracted) { lat = extracted.lat; lng = extracted.lng; }
+  }
+  if(!isValidCoordinates(lat,lng)) return null;
+  return {lat:lat,lng:lng,mapsLink:canonicalExactMapsUrl(lat,lng)};
 }
 
 // عرض رسالة الموقع
@@ -1653,7 +1691,7 @@ function showLocPreview(lat, lng) {
 // ============================================================
 function verifyApptLocation() {
   var link = document.getElementById('appointment_maps_link').value.trim();
-  if(!link) { showLocMsg('err','أدخل رابط الموقع أولاً'); return; }
+  if(!link) { showLocMsg('err','أدخل رابط دبوس المنزل أو الإحداثيات أولاً'); return; }
 
   document.getElementById('loc_preview').style.display = 'none';
   document.getElementById('loc_preview_map').src = 'about:blank';
@@ -1661,62 +1699,40 @@ function verifyApptLocation() {
   document.getElementById('chk_loc_verified').checked = false;
   document.getElementById('appointment_location_verified').value = 'false';
 
-  var isShort = link.indexOf('maps.app.goo.gl') !== -1 || link.indexOf('goo.gl/maps') !== -1;
-  var isMapLink = link.indexOf('google.com/maps') !== -1 || link.indexOf('maps.google') !== -1 || isShort;
-
-  if(!isMapLink || link.length < 10) {
-    showLocMsg('err','هذا الرابط لا يبدو رابط Google Maps صالحًا');
-    document.getElementById('loc_open_btn').style.display = 'none';
-    return;
-  }
-
-  // زر فتح الموقع
-  document.getElementById('loc_open_btn').href = link;
-  document.getElementById('loc_open_btn').style.display = 'inline-flex';
-
-  if(isShort) {
-    // رابط مختصر — لا إحداثيات
-    _locLat = null; _locLng = null;
-    _locSource = 'manual_link';
-    document.getElementById('appointment_lat').value = '';
-    document.getElementById('appointment_lng').value = '';
-    document.getElementById('appointment_location_source').value = 'manual_link';
-    showLocMsg('warn','تم حفظ رابط الموقع، لكن تعذر استخراج الإحداثيات من الرابط المختصر.');
-    document.getElementById('loc_save_row').style.display = _foundCustomerKey ? 'flex' : 'none';
-    return;
-  }
-
   var extracted = extractCoordinatesFromMapUrl(link);
-  if(extracted) {
-    _locLat = extracted.lat;
-    _locLng = extracted.lng;
-    _locSource = extracted.source;
-    document.getElementById('appointment_lat').value = _locLat;
-    document.getElementById('appointment_lng').value = _locLng;
-    document.getElementById('appointment_location_source').value = _locSource;
-
-    var msgText = extracted.source === 'place_coordinates'
-      ? '✅ تم استخراج الموقع الفعلي من رابط Google Maps'
-      : extracted.source === 'query_coordinates'
-        ? '✅ تم استخراج الإحداثيات من الرابط'
-        : '⚠️ تم استخراج مركز عرض الخريطة (قد لا يكون الموقع الدقيق)';
-    showLocMsg(extracted.source === 'viewport_coordinates' ? 'warn' : 'ok', msgText);
-    showLocPreview(_locLat, _locLng);
-
-    // هل للعميل موقع محفوظ سابق يختلف؟
-    if(_savedCustomerLat && _savedCustomerLng &&
-       (Math.abs(_savedCustomerLat - _locLat) > 0.0001 || Math.abs(_savedCustomerLng - _locLng) > 0.0001)) {
-      document.getElementById('loc_conflict_box').style.display = 'block';
-    } else {
-      document.getElementById('loc_save_row').style.display = _foundCustomerKey ? 'flex' : 'none';
-    }
-  } else {
+  if(!extracted || isGenericCityMapsUrl(link)) {
     _locLat = null; _locLng = null;
-    _locSource = 'manual_link';
+    _locSource = '';
     document.getElementById('appointment_lat').value = '';
     document.getElementById('appointment_lng').value = '';
-    document.getElementById('appointment_location_source').value = 'manual_link';
-    showLocMsg('warn','تم حفظ رابط الموقع. تعذر استخراج الإحداثيات من هذا الرابط.');
+    document.getElementById('appointment_location_source').value = '';
+    document.getElementById('loc_open_btn').style.display = 'none';
+    document.getElementById('loc_save_row').style.display = 'none';
+    var isShort = /(?:maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(link);
+    showLocMsg('err', isShort
+      ? 'الرابط المختصر لا يثبت إحداثيات المنزل. اطلب من العميل الضغط على «استخدام موقعي الحالي» في صفحة الحجز، أو الصق رابطًا يحتوي LAT,LNG.'
+      : 'هذا رابط مدينة/خريطة عامة وليس دبوس منزل. الصق رابطًا يحتوي إحداثيات دقيقة.');
+    return;
+  }
+
+  _locLat = extracted.lat;
+  _locLng = extracted.lng;
+  _locSource = extracted.source;
+  var canonicalLink = canonicalExactMapsUrl(_locLat,_locLng);
+  document.getElementById('appointment_maps_link').value = canonicalLink;
+  document.getElementById('appointment_lat').value = _locLat;
+  document.getElementById('appointment_lng').value = _locLng;
+  document.getElementById('appointment_location_source').value = _locSource;
+  document.getElementById('loc_open_btn').href = canonicalLink;
+  document.getElementById('loc_open_btn').style.display = 'inline-flex';
+  showLocMsg('ok','✅ تم تثبيت دبوس العميل بالإحداثيات. افتح المعاينة ثم أكد أن الموقع صحيح.');
+  showLocPreview(_locLat, _locLng);
+
+  // هل للعميل موقع محفوظ سابق يختلف؟
+  if(_savedCustomerLat && _savedCustomerLng &&
+     (Math.abs(_savedCustomerLat - _locLat) > 0.0001 || Math.abs(_savedCustomerLng - _locLng) > 0.0001)) {
+    document.getElementById('loc_conflict_box').style.display = 'block';
+  } else {
     document.getElementById('loc_save_row').style.display = _foundCustomerKey ? 'flex' : 'none';
   }
 }
@@ -1787,13 +1803,19 @@ function lookupCustomerByPhone(phone, serial) {
   if(!db || !/^05\d{8}$/.test(phone)) return;
   db.ref('customers').once('value').then(function(snap) {
     if(serial && serial !== customerLookupSerial) return;
-    var key = null, cust = null;
+    var key = null, cust = null, locCust = null, locCustTime = -1;
     snap.forEach(function(c){
       var value = c.val() || {};
       if(sameLookupPhone(value.phone || value.mobile || value.whatsapp, phone)) {
-        if(!cust || Number(value.updatedAt || value.createdAt || 0) >= Number(cust.updatedAt || cust.createdAt || 0)) {
+        var valueTime = Date.parse(value.updatedAt || value.createdAt || '') || Number(value.updatedAt || value.createdAt || 0) || 0;
+        var custTime = cust ? (Date.parse(cust.updatedAt || cust.createdAt || '') || Number(cust.updatedAt || cust.createdAt || 0) || 0) : -1;
+        if(!cust || valueTime >= custTime) {
           key = c.key;
           cust = value;
+        }
+        if(exactCoordinatesFromRecord(value) && valueTime >= locCustTime) {
+          locCust = value;
+          locCustTime = valueTime;
         }
       }
     });
@@ -1823,12 +1845,13 @@ function lookupCustomerByPhone(phone, serial) {
       }
     }
 
-    // موقع محفوظ؟
-    var savedLink = String(cust.mapsLink || cust.mapLink || cust.googleMapsLink || cust.locationUrl || cust.locationLink || '').trim();
-    var hasLocation = isValidCoordinates(Number(cust.lat), Number(cust.lng)) || !!savedLink;
+    // موقع محفوظ؟ لا نعتمد إلا إحداثيات دبوس صريحة.
+    var savedCoords = exactCoordinatesFromRecord(locCust || cust);
+    var savedLink = savedCoords ? canonicalExactMapsUrl(savedCoords.lat,savedCoords.lng) : '';
+    var hasLocation = !!savedCoords;
     if(hasLocation) {
-      _savedCustomerLat  = Number(cust.lat) || null;
-      _savedCustomerLng  = Number(cust.lng) || null;
+      _savedCustomerLat  = savedCoords.lat;
+      _savedCustomerLng  = savedCoords.lng;
       _savedCustomerLink = savedLink;
 
       // استعادة موقع العميل المحفوظ تلقائيًا للحجز الجديد.
@@ -1836,7 +1859,7 @@ function lookupCustomerByPhone(phone, serial) {
         document.getElementById('appointment_maps_link').value = _savedCustomerLink;
         document.getElementById('loc_open_btn').href = _savedCustomerLink;
         document.getElementById('loc_open_btn').style.display = 'inline-flex';
-        if(_savedCustomerLat && _savedCustomerLng) {
+        if(isValidCoordinates(_savedCustomerLat,_savedCustomerLng)) {
           document.getElementById('appointment_lat').value = _savedCustomerLat;
           document.getElementById('appointment_lng').value = _savedCustomerLng;
           document.getElementById('appointment_location_source').value = 'maps_link';
@@ -2151,24 +2174,29 @@ function saveAppt(){
     data.serviceAreaCheckedAt = new Date().toISOString();
   }
 
-  // موقع العميل — حقول اختيارية
-  var mapsLink = document.getElementById('appointment_maps_link').value.trim();
-  if(mapsLink) data.mapsLink = mapsLink;
-
-  var lat = Number(document.getElementById('appointment_lat').value);
-  var lng = Number(document.getElementById('appointment_lng').value);
-  if(isValidCoordinates(lat, lng)) {
-    data.lat = lat;
-    data.lng = lng;
+  // موقع العميل إلزامي ودقيق: لا يُحفظ اسم مدينة أو رابط مختصر بلا إحداثيات.
+  var exactFormLocation = readAppointmentFormExactLocation();
+  if(!exactFormLocation) {
+    return showToast('❌ يجب إدخال دبوس منزل يحتوي إحداثيات ثم الضغط على «التحقق من الرابط»');
   }
-  var locSrc = document.getElementById('appointment_location_source').value;
-  if(locSrc) data.locationSource = locSrc;
-
   var locVerified = document.getElementById('appointment_location_verified').value === 'true' ||
                     document.getElementById('chk_loc_verified').checked;
-  if(mapsLink || isValidCoordinates(lat, lng)) {
-    data.locationVerified = locVerified;
+  if(!locVerified) {
+    return showToast('❌ افتح معاينة الموقع وتأكد أن الدبوس صحيح، ثم فعّل مربع التأكيد');
   }
+  var mapsLink = exactFormLocation.mapsLink;
+  var lat = exactFormLocation.lat;
+  var lng = exactFormLocation.lng;
+  var locSrc = document.getElementById('appointment_location_source').value || 'manual_coordinates';
+  document.getElementById('appointment_maps_link').value = mapsLink;
+  document.getElementById('appointment_lat').value = lat;
+  document.getElementById('appointment_lng').value = lng;
+  document.getElementById('appointment_location_verified').value = 'true';
+  data.mapsLink = mapsLink;
+  data.lat = lat;
+  data.lng = lng;
+  data.locationSource = locSrc;
+  data.locationVerified = true;
 
   if(!db) { showToast('❌ Firebase غير متاح'); return; }
 
@@ -2629,48 +2657,68 @@ function isGenericCityMapsUrl(value){
   if(!raw) return false;
   var decoded = raw;
   try { decoded = decodeURIComponent(raw); } catch(e) {}
-  decoded = decoded.replace(/\+/g,' ').toLowerCase();
+  decoded = decoded
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,'')
+    .replace(/\+/g,' ')
+    .toLowerCase();
 
   // روابط صفحة مدينة جدة أو البحث عن جدة ليست موقع عميل دقيقًا.
+  var plainCity = /^(?:جدة|jeddah|jeddah\s*\/\s*جدة|جدة\s*\/\s*jeddah)$/i.test(decoded.trim());
   var cityPlace = /\/maps\/(?:place|search)\/(?:جدة|jeddah)(?:\/|@|\?|$)/i.test(decoded);
   var cityQuery = /[?&](?:q|query|destination)=(?:جدة|jeddah)(?:&|$)/i.test(decoded);
   // Google Maps يضع أحيانًا مقياسًا بعشرات الكيلومترات في رابط المدينة العام.
   var veryWideView = /,\d{5,}m(?:\/|$)/i.test(decoded);
-  return cityPlace || cityQuery || veryWideView;
+  return plainCity || cityPlace || cityQuery || veryWideView;
+}
+
+function locationUrlFields(record) {
+  if(!record) return [];
+  return [
+    record.mapsLink, record.mapLink, record.mapUrl, record.mapsUrl,
+    record.locationUrl, record.googleMapsUrl, record.googleMapsLink,
+    record.locationLink, record.customerLocation, record.addressUrl,
+    typeof record.location === 'string' ? record.location : ''
+  ];
+}
+
+function exactCoordinatesFromRecord(record) {
+  if(!record) return null;
+  var links = locationUrlFields(record).map(function(value){ return String(value || '').trim(); });
+  var hasGenericLink = links.some(function(link){ return link && isGenericCityMapsUrl(link); });
+  var source = String(record.locationSource || record.geoSource || '').toLowerCase();
+  var directAllowed = source !== 'viewport_coordinates' &&
+    (!hasGenericLink || /^(?:gps|manual_coordinates|query_coordinates|place_coordinates)$/.test(source));
+
+  var pairs = [
+    [record.lat,record.lng], [record.latitude,record.longitude],
+    [record.customerLat,record.customerLng], [record.locationLat,record.locationLng],
+    [record.geoLat,record.geoLng]
+  ];
+  var nested = [record.location,record.coordinates,record.coords,record.position];
+  nested.forEach(function(item){
+    if(item && typeof item === 'object') {
+      pairs.push([item.lat,item.lng],[item.latitude,item.longitude]);
+    }
+  });
+  if(directAllowed) {
+    for(var p=0;p<pairs.length;p++) {
+      var lat = Number(pairs[p][0]), lng = Number(pairs[p][1]);
+      if(isValidCoordinates(lat,lng)) return {lat:lat,lng:lng,source:source || 'stored_coordinates'};
+    }
+  }
+
+  // لا نعتمد الرابط نفسه؛ نستخرج منه دبوسًا صريحًا ثم نبني رابطًا جديدًا.
+  for(var i=0;i<links.length;i++) {
+    if(!links[i] || isGenericCityMapsUrl(links[i])) continue;
+    var extracted = extractCoordinatesFromMapUrl(links[i]);
+    if(extracted) return extracted;
+  }
+  return null;
 }
 
 function appointmentMapsUrl(a){
-  if(!a) return '';
-
-  // رابط العميل هو المرجع الأول؛ قد تكون إحداثيات السجل القديم غير صحيحة.
-  var candidates = [
-    a.mapsLink, a.mapLink, a.mapUrl, a.locationUrl,
-    a.googleMapsUrl, a.googleMapsLink, a.locationLink
-  ];
-  var rejectedGenericMap = false;
-  for(var i=0;i<candidates.length;i++){
-    var link = String(candidates[i] || '').trim();
-    if(!/^https?:\/\//i.test(link)) continue;
-    if(isGenericCityMapsUrl(link)) {
-      rejectedGenericMap = true;
-      continue;
-    }
-    return link;
-  }
-
-  // لا نستخدم إحداثيات مأخوذة من رابط مدينة عام؛ فهي مركز الخريطة وليست منزل العميل.
-  if(rejectedGenericMap) return '';
-
-  // استخدم الإحداثيات فقط عند عدم وجود رابط موقع محفوظ.
-  var lat = Number(a.lat), lng = Number(a.lng);
-  if(Number.isFinite(lat) && Number.isFinite(lng) &&
-     lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 &&
-     !(lat === 0 && lng === 0)){
-    return 'https://www.google.com/maps?q=' + encodeURIComponent(lat + ',' + lng);
-  }
-
-  // لا نحوّل العنوان النصي إلى خريطة؛ المطلوب موقع دقيق فقط.
-  return '';
+  var coords = exactCoordinatesFromRecord(a);
+  return coords ? canonicalExactMapsUrl(coords.lat,coords.lng) : '';
 }
 
 function normalizeLocationPhone(value){
@@ -2682,28 +2730,8 @@ function normalizeLocationPhone(value){
 }
 
 function customerExactMapsUrl(customer){
-  if(!customer) return '';
-  var fields = [
-    customer.mapsLink, customer.mapLink, customer.mapUrl,
-    customer.locationUrl, customer.googleMapsUrl,
-    customer.googleMapsLink, customer.locationLink
-  ];
-  var rejectedGenericMap = false;
-  for(var i=0;i<fields.length;i++){
-    var link = String(fields[i] || '').trim();
-    if(!/^https?:\/\//i.test(link)) continue;
-    if(isGenericCityMapsUrl(link)) {
-      rejectedGenericMap = true;
-      continue;
-    }
-    return link;
-  }
-  if(rejectedGenericMap) return '';
-  var lat = Number(customer.lat), lng = Number(customer.lng);
-  if(isValidCoordinates(lat,lng)){
-    return 'https://www.google.com/maps?q=' + encodeURIComponent(lat+','+lng);
-  }
-  return '';
+  var coords = exactCoordinatesFromRecord(customer);
+  return coords ? canonicalExactMapsUrl(coords.lat,coords.lng) : '';
 }
 
 // يعيد رابط الموعد مباشرة، أو يبحث عنه في ملف العميل باستخدام رقم الجوال.
@@ -2717,15 +2745,28 @@ function resolveExactAppointmentLocation(a){
   if(!wantedPhone) return Promise.resolve('');
 
   return db.ref('customers').once('value').then(function(snap){
-    var exact = '';
+    var best = null;
     snap.forEach(function(child){
-      if(exact) return;
       var customer = child.val() || {};
       if(normalizeLocationPhone(customer.phone || customer.mobile || customer.whatsapp) === wantedPhone){
-        exact = customerExactMapsUrl(customer);
+        var coords = exactCoordinatesFromRecord(customer);
+        if(!coords) return;
+        var timestamp = Date.parse(customer.updatedAt || customer.createdAt || '') ||
+          Number(customer.updatedAt || customer.createdAt || 0) || 0;
+        var verified = customer.locationVerified === true || customer.locationVerified === 'true';
+        if(!best || (verified && !best.verified) || (verified === best.verified && timestamp >= best.timestamp)) {
+          best = {coords:coords,timestamp:timestamp,verified:verified};
+        }
       }
     });
-    if(exact) a.mapsLink = exact;
+    var exact = best ? canonicalExactMapsUrl(best.coords.lat,best.coords.lng) : '';
+    if(best) {
+      a.lat = best.coords.lat;
+      a.lng = best.coords.lng;
+      a.mapsLink = exact;
+      a.locationSource = best.coords.source || 'customer_record';
+      a.locationVerified = best.verified;
+    }
     return exact;
   });
 }
@@ -2740,7 +2781,10 @@ function openExactAppointmentLocation(id){
     if(exact){
       window.open(exact,'_blank','noopener');
     } else {
-      showToast('⚠️ لا يوجد رابط موقع دقيق محفوظ لهذا العميل');
+      showToast('⚠️ لا يوجد دبوس دقيق. يجب تحديث موقع العميل مرة واحدة.');
+      if(confirm('الموقع المحفوظ هو مدينة عامة أو لا يحتوي إحداثيات. هل تريد فتح تعديل الموعد لإضافة دبوس المنزل الآن؟')) {
+        editAppt(id);
+      }
     }
   }).catch(function(err){
     console.error('customer map lookup:',err);
@@ -2755,7 +2799,7 @@ function openDetail(id){
   const dsv=atwadStatusView(a);
   const aId = a.id || a._fbKey;
   const detailMapsUrl = appointmentMapsUrl(a);
-  const detailCity = a.city || a.address || '';
+  const detailCity = a.address || a.district || a.city || '';
   document.getElementById('detailTitle').textContent='📋 ' + a.client;
   document.getElementById('detailEditBtn').onclick=()=>editAppt(aId);
   document.getElementById('detailBody').innerHTML=`
@@ -2767,7 +2811,7 @@ function openDetail(id){
       <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">🛠️ الخدمة</div><div style="font-weight:700;color:var(--deep)">${a.service||'—'}</div><div style="font-size:12px;color:var(--mist)">${a.units||1} وحدة</div></div>
       <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">📅 الموعد</div><div style="font-weight:700;color:var(--deep)">${formatDateShort(a.date)}</div><div style="font-size:12px;color:var(--mist)">⏰ ${a.time||'—'}</div></div>
       <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:4px;">👷 الفني</div><div style="font-weight:700;color:${tc}">${TECHS[a.tech]||a.tech||'—'}</div></div>
-      <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:6px;">📍 موقع العميل</div><button type="button" onclick="openExactAppointmentLocation('${aId}')" style="width:100%;padding:7px;background:${detailMapsUrl?'#E0F2FE':'#FEF3C7'};color:${detailMapsUrl?'#0369A1':'#92400E'};border:0;border-radius:7px;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:800;cursor:pointer;">${detailMapsUrl?'🗺️ فتح في خرائط Google':'🔎 استرجاع الموقع المحفوظ'}</button>${detailCity?`<div style="font-size:11px;color:var(--mist);margin-top:6px;">المدينة: ${atwadEsc(detailCity)}</div>`:''}</div>
+      <div style="background:#fff;border:1.5px solid var(--ice);border-radius:10px;padding:12px;"><div style="font-size:11px;color:var(--mist);margin-bottom:6px;">📍 موقع العميل</div><button type="button" onclick="openExactAppointmentLocation('${aId}')" style="width:100%;padding:7px;background:${detailMapsUrl?'#E0F2FE':'#FEF3C7'};color:${detailMapsUrl?'#0369A1':'#92400E'};border:0;border-radius:7px;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:800;cursor:pointer;">${detailMapsUrl?'🗺️ فتح دبوس العميل':'⚠️ تحديث الموقع الدقيق'}</button>${detailCity?`<div style="font-size:11px;color:var(--mist);margin-top:6px;">العنوان: ${atwadEsc(detailCity)}</div>`:''}</div>
     </div>
     ${renderTechnicianNotificationBadge(a)?`<div style="margin-bottom:12px;">${renderTechnicianNotificationBadge(a)}</div>`:''}
     ${a.notes?`<div style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;color:#92400E;">📝 ${a.notes}</div>`:''}
@@ -2779,7 +2823,7 @@ function openDetail(id){
         ? `<button onclick="sendToTechnician('${aId}')" style="flex:1;padding:10px;background:#7C3AED;color:#fff;border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:100px;">📤 إرسال للفني</button>
            <button onclick="copyTaskMessage('${aId}')" style="flex:1;padding:10px;background:#F3F4F6;color:#374151;border:1px solid #D1D5DB;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:100px;">📋 نسخ المهمة</button>`
         : `<button disabled style="flex:1;padding:10px;background:#E9D5FF;color:#A78BFA;border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:not-allowed;min-width:100px;" title="عيّن فنيًا أولًا">📤 إرسال للفني</button>`}
-      <button type="button" onclick="openExactAppointmentLocation('${aId}')" title="فتح رابط العميل الدقيق أو استرجاعه من ملف العميل" style="flex:1;padding:10px;background:${detailMapsUrl?'var(--ice)':'#FEF3C7'};color:${detailMapsUrl?'var(--sky)':'#92400E'};border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:100px;">${detailMapsUrl?'🗺️ خرائط':'🔎 استرجاع الموقع'}</button>
+      <button type="button" onclick="openExactAppointmentLocation('${aId}')" title="فتح دبوس العميل الدقيق أو تحديثه" style="flex:1;padding:10px;background:${detailMapsUrl?'var(--ice)':'#FEF3C7'};color:${detailMapsUrl?'var(--sky)':'#92400E'};border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:100px;">${detailMapsUrl?'🗺️ الدبوس':'⚠️ تحديث الموقع'}</button>
       ${a.status!=='done'?`<button onclick="markDone('${aId}');document.getElementById('detailModal').classList.remove('open')" style="flex:1;padding:10px;background:#D1FAE5;color:var(--success);border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:80px;">✓ إتمام</button>`:''}
       <button onclick="deleteAppt('${aId}',null);document.getElementById('detailModal').classList.remove('open')" style="flex:1;padding:10px;background:#FEE2E2;color:#EF4444;border:none;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:80px;">🗑️ حذف</button>
     </div>`;
@@ -2998,6 +3042,11 @@ async function sendToTechnician(id) {
     try { await resolveExactAppointmentLocation(a); }
     catch(e) { console.error('technician location lookup:', e); }
   }
+  if(!appointmentMapsUrl(a)) {
+    showToast('❌ لم تُرسل المهمة: يجب تحديث دبوس العميل الدقيق أولاً');
+    if(confirm('لا يوجد موقع دقيق لهذا الموعد. هل تريد فتح التعديل وإضافة دبوس المنزل الآن؟')) editAppt(id);
+    return;
+  }
 
   var msg      = buildTechnicianMessage(a);
   var techName = TECHS[a.tech] || a.tech;
@@ -3118,6 +3167,10 @@ async function copyTaskMessage(id) {
     showToast('🔎 جارٍ استرجاع موقع العميل قبل النسخ...');
     try { await resolveExactAppointmentLocation(a); }
     catch(e) { console.error('copy location lookup:', e); }
+  }
+  if(!appointmentMapsUrl(a)) {
+    showToast('❌ تعذر النسخ: يجب تحديث دبوس العميل الدقيق أولاً');
+    return;
   }
   var msg = buildTechnicianMessage(a);
   if(navigator.clipboard && navigator.clipboard.writeText) {
