@@ -77,6 +77,9 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
 .prog-bar-bg{flex:1;background:var(--ice);border-radius:4px;height:8px;overflow:hidden;}
 .prog-bar-fill{height:100%;border-radius:4px;transition:width .8s;}
 .prog-val{font-size:12px;font-weight:700;color:var(--deep);min-width:50px;text-align:left;}
+.neighborhood-chart .prog-label{min-width:125px;font-weight:700;color:var(--deep);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.neighborhood-chart .prog-val{min-width:82px;}
+.chart-note{font-size:11px;color:var(--mist);line-height:1.7;margin-top:10px;padding-top:9px;border-top:1px solid var(--ice);}
 
 /* TECH CARDS */
 .tech-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:0 18px 18px;}
@@ -151,6 +154,20 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
     <div class="chart-card">
       <div class="chart-title">🥧 توزيع الخدمات</div>
       <div id="svcChart"></div>
+    </div>
+  </div>
+
+  <!-- الأحياء الأكثر طلباً ودخلاً -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">📍 الأحياء الأكثر طلباً للخدمة</div>
+      <div class="neighborhood-chart" id="neighborhoodDemandChart"></div>
+      <div class="chart-note" id="neighborhoodDemandNote">بحسب عدد أوامر العمل في الفترة المحددة.</div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">💰 الأحياء الأعلى دخلاً</div>
+      <div class="neighborhood-chart" id="neighborhoodRevenueChart"></div>
+      <div class="chart-note" id="neighborhoodRevenueNote">بحسب إجمالي أوامر العمل المكتملة والمفوترة في الفترة المحددة.</div>
     </div>
   </div>
 
@@ -355,6 +372,124 @@ function renderSvcChart() {
   }).join('') || '<div style="text-align:center;color:var(--mist);padding:20px;font-size:13px;">لا توجد بيانات</div>';
 }
 
+// ===== NEIGHBORHOODS =====
+// يجمع اختلافات كتابة اسم الحي، ولا يعتبر اسم المدينة أو رابط الموقع اسم حي.
+function normalizePhoneForReports(value) {
+  var digits = String(value || '').replace(/\D/g,'');
+  if(digits.indexOf('966') === 0) digits = '0' + digits.substring(3);
+  if(digits.length === 9 && digits.charAt(0) === '5') digits = '0' + digits;
+  return digits;
+}
+
+function neighborhoodKey(value) {
+  return String(value || '')
+    .replace(/ـ/g,'')
+    .replace(/[\u064B-\u065F\u0670]/g,'')
+    .replace(/[أإآ]/g,'ا')
+    .replace(/ة/g,'ه')
+    .replace(/ى/g,'ي')
+    .replace(/\s+/g,' ')
+    .trim()
+    .toLowerCase();
+}
+
+function cleanNeighborhoodValue(raw, allowAddress) {
+  var value = String(raw || '').replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g,' ').trim();
+  if(!value || /^https?:\/\//i.test(value)) return '';
+
+  var cityOnly = neighborhoodKey(value).replace(/[،,./\\_-]/g,' ').replace(/\s+/g,' ').trim();
+  if(['جده','مدينه جده','jeddah','السعوديه','المملكه العربيه السعوديه','saudi arabia'].indexOf(cityOnly) !== -1) return '';
+
+  var districtMatch = value.match(/(?:^|[،,\s])حي\s+([^،,\/\n-]+)/);
+  if(districtMatch && districtMatch[1]) value = districtMatch[1].trim();
+  else if(allowAddress) value = value.split(/[،,\/\n]/)[0].trim();
+
+  value = value.replace(/^(?:ال)?حي\s*[:：-]?\s*/,'').replace(/\s+/g,' ').trim();
+  if(!value || value.length > 45 || /(?:شارع|طريق|عماره|عمارة|منزل|فيلا|مبنى|رقم|بلوك)/.test(value)) return '';
+  if(/[0-9٠-٩]{3,}/.test(value)) return '';
+
+  cityOnly = neighborhoodKey(value);
+  if(['جده','مدينه جده','jeddah','السعوديه','المملكه العربيه السعوديه','saudi arabia'].indexOf(cityOnly) !== -1) return '';
+  return value;
+}
+
+function directNeighborhood(record) {
+  record = record || {};
+  var fields = [record.district, record.neighborhood, record.neighbourhood, record.area,
+    record.clientDistrict, record.customerDistrict, record.districtName, record.areaName];
+  for(var i=0;i<fields.length;i++) {
+    var direct = cleanNeighborhoodValue(fields[i], false);
+    if(direct) return direct;
+  }
+  return cleanNeighborhoodValue(record.address || record.clientAddress || record.customerAddress, true);
+}
+
+function neighborhoodForWorkOrder(order) {
+  var found = directNeighborhood(order);
+  if(found) return found;
+
+  var phone = normalizePhoneForReports(order && (order.phone || order.clientPhone || order.customerPhone || order.mobile));
+  if(!phone) return '';
+  var related = clients.concat(appointments);
+  for(var i=0;i<related.length;i++) {
+    var itemPhone = normalizePhoneForReports(related[i] && (related[i].phone || related[i].mobile || related[i].whatsapp));
+    if(itemPhone === phone) {
+      found = directNeighborhood(related[i]);
+      if(found) return found;
+    }
+  }
+  return '';
+}
+
+function buildNeighborhoodStats() {
+  var stats = {}, demandUnknown = 0, revenueUnknown = 0;
+  var periodOrders = filterByPeriod(workOrders, 'date');
+
+  periodOrders.forEach(function(w){
+    var label = neighborhoodForWorkOrder(w);
+    var completed = w.status === 'done' || w.status === 'invoiced';
+    var revenue = completed ? (parseFloat(w.total) || 0) : 0;
+    if(!label) {
+      demandUnknown++;
+      if(completed && revenue > 0) revenueUnknown++;
+      return;
+    }
+    var key = neighborhoodKey(label);
+    if(!stats[key]) stats[key] = {label:label,count:0,revenue:0};
+    stats[key].count++;
+    stats[key].revenue += revenue;
+  });
+
+  return {items:Object.keys(stats).map(function(key){ return stats[key]; }), demandUnknown:demandUnknown, revenueUnknown:revenueUnknown};
+}
+
+function renderNeighborhoodBars(targetId, items, metric, suffix, color) {
+  var target = document.getElementById(targetId);
+  var ranked = items.filter(function(item){ return item[metric] > 0; })
+    .sort(function(a,b){ return b[metric] - a[metric]; }).slice(0,10);
+  if(!ranked.length) {
+    target.innerHTML = '<div style="text-align:center;color:var(--mist);padding:20px;font-size:13px;">لا توجد بيانات أحياء في الفترة المحددة</div>';
+    return;
+  }
+  var maxValue = ranked[0][metric] || 1;
+  target.innerHTML = ranked.map(function(item){
+    var pct = Math.max(3, Math.round(item[metric] / maxValue * 100));
+    var shown = metric === 'revenue' ? fmt(Math.round(item[metric])) : fmt(item[metric]);
+    return '<div class="prog-item">'+
+      '<div class="prog-label" title="'+item.label+'">'+item.label+'</div>'+
+      '<div class="prog-bar-bg"><div class="prog-bar-fill" style="width:'+pct+'%;background:'+color+'"></div></div>'+
+      '<div class="prog-val">'+shown+' '+suffix+'</div></div>';
+  }).join('');
+}
+
+function renderNeighborhoodCharts() {
+  var result = buildNeighborhoodStats();
+  renderNeighborhoodBars('neighborhoodDemandChart', result.items, 'count', 'طلب', 'linear-gradient(90deg,#0EA5E9,#1E5F8A)');
+  renderNeighborhoodBars('neighborhoodRevenueChart', result.items, 'revenue', '﷼', 'linear-gradient(90deg,#10B981,#047857)');
+  document.getElementById('neighborhoodDemandNote').textContent = 'بحسب عدد أوامر العمل في الفترة المحددة' + (result.demandUnknown ? ' · سجلات بلا حي محدد: '+fmt(result.demandUnknown) : '') + '.';
+  document.getElementById('neighborhoodRevenueNote').textContent = 'بحسب أوامر العمل المكتملة والمفوترة' + (result.revenueUnknown ? ' · عمليات مدفوعة بلا حي محدد: '+fmt(result.revenueUnknown) : '') + '.';
+}
+
 // ===== TECH PERFORMANCE =====
 function renderTechGrid() {
   var TECHS = {Abrar:{name:'أحمد',icon:'👷',color:'#0EA5E9'}, Shoib:{name:'شعيب',icon:'👷',color:'#10B981'}, Suhail:{name:'سهيل',icon:'👷',color:'#8B5CF6'}};
@@ -440,7 +575,7 @@ function renderTopClients() {
       }).join('');
 }
 
-function renderAll() { renderKPIs(); renderRevChart(); renderSvcChart(); renderTechGrid(); renderSvcTable(); renderOpsTable(); renderTopClients(); }
+function renderAll() { renderKPIs(); renderRevChart(); renderSvcChart(); renderNeighborhoodCharts(); renderTechGrid(); renderSvcTable(); renderOpsTable(); renderTopClients(); }
 
 function printReport() { window.print(); }
 function showToast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(function(){t.classList.remove('show');},2800); }
