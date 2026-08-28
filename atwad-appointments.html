@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="atwad-build" content="2026-08-28-appointments-location-final-v1">
 <title>مؤسسة أطواد - إدارة المواعيد</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap');
@@ -1648,10 +1649,30 @@ function canonicalExactMapsUrl(lat,lng) {
     encodeURIComponent(Number(lat) + ',' + Number(lng));
 }
 
+function isTrustedGoogleMapsLocationUrl(value) {
+  var link=String(value||'').trim();
+  if(!/^https?:\/\//i.test(link) || isGenericCityMapsUrl(link)) return false;
+  try {
+    var parsed=new URL(link);
+    var host=parsed.hostname.toLowerCase().replace(/^www\./,'');
+    return host==='maps.app.goo.gl' ||
+           (host==='goo.gl' && parsed.pathname.toLowerCase().indexOf('/maps')===0) ||
+           ((host==='google.com' || /(^|\.)google\.[a-z.]+$/i.test(host)) &&
+             (parsed.pathname.toLowerCase().indexOf('/maps')===0 || parsed.searchParams.has('q') || parsed.searchParams.has('query') || parsed.searchParams.has('destination')));
+  } catch(e) { return false; }
+}
+
+function firstTrustedLocationUrl(record) {
+  var links=locationUrlFields(record);
+  for(var i=0;i<links.length;i++) {
+    var link=String(links[i]||'').trim();
+    if(isTrustedGoogleMapsLocationUrl(link)) return link;
+  }
+  return '';
+}
+
 function syncApptLocationConfirmation(checkbox) {
-  var ok = !!(checkbox && checkbox.checked &&
-    isValidCoordinates(Number(document.getElementById('appointment_lat').value),
-                       Number(document.getElementById('appointment_lng').value)));
+  var ok = !!(checkbox && checkbox.checked && readAppointmentFormExactLocation());
   document.getElementById('appointment_location_verified').value = ok ? 'true' : 'false';
   if(checkbox && checkbox.checked && !ok) {
     checkbox.checked = false;
@@ -1667,8 +1688,13 @@ function readAppointmentFormExactLocation() {
     var extracted = extractCoordinatesFromMapUrl(link);
     if(extracted) { lat = extracted.lat; lng = extracted.lng; }
   }
-  if(!isValidCoordinates(lat,lng)) return null;
-  return {lat:lat,lng:lng,mapsLink:canonicalExactMapsUrl(lat,lng)};
+  if(isValidCoordinates(lat,lng)) {
+    return {lat:lat,lng:lng,mapsLink:canonicalExactMapsUrl(lat,lng),hasCoordinates:true};
+  }
+  if(isTrustedGoogleMapsLocationUrl(link)) {
+    return {lat:null,lng:null,mapsLink:link,hasCoordinates:false};
+  }
+  return null;
 }
 
 // عرض رسالة الموقع
@@ -1700,7 +1726,8 @@ function verifyApptLocation() {
   document.getElementById('appointment_location_verified').value = 'false';
 
   var extracted = extractCoordinatesFromMapUrl(link);
-  if(!extracted || isGenericCityMapsUrl(link)) {
+  var trustedLink = isTrustedGoogleMapsLocationUrl(link);
+  if((!extracted && !trustedLink) || isGenericCityMapsUrl(link)) {
     _locLat = null; _locLng = null;
     _locSource = '';
     document.getElementById('appointment_lat').value = '';
@@ -1708,10 +1735,20 @@ function verifyApptLocation() {
     document.getElementById('appointment_location_source').value = '';
     document.getElementById('loc_open_btn').style.display = 'none';
     document.getElementById('loc_save_row').style.display = 'none';
-    var isShort = /(?:maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(link);
-    showLocMsg('err', isShort
-      ? 'الرابط المختصر لا يثبت إحداثيات المنزل. اطلب من العميل الضغط على «استخدام موقعي الحالي» في صفحة الحجز، أو الصق رابطًا يحتوي LAT,LNG.'
-      : 'هذا رابط مدينة/خريطة عامة وليس دبوس منزل. الصق رابطًا يحتوي إحداثيات دقيقة.');
+    showLocMsg('err','هذا ليس رابط Google Maps صالحًا لموقع العميل، أو أنه رابط مدينة عامة.');
+    return;
+  }
+
+  if(!extracted && trustedLink) {
+    _locLat=null; _locLng=null;
+    _locSource=/(?:maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(link)?'shared_short_maps_link':'shared_maps_link';
+    document.getElementById('appointment_lat').value='';
+    document.getElementById('appointment_lng').value='';
+    document.getElementById('appointment_location_source').value=_locSource;
+    document.getElementById('loc_open_btn').href=link;
+    document.getElementById('loc_open_btn').style.display='inline-flex';
+    document.getElementById('loc_save_row').style.display=_foundCustomerKey?'flex':'none';
+    showLocMsg('ok','✅ رابط Google Maps صالح. افتحه للتأكد من المنزل ثم فعّل مربع تأكيد الموقع.');
     return;
   }
 
@@ -1813,7 +1850,7 @@ function lookupCustomerByPhone(phone, serial) {
           key = c.key;
           cust = value;
         }
-        if(exactCoordinatesFromRecord(value) && valueTime >= locCustTime) {
+        if(customerExactMapsUrl(value) && valueTime >= locCustTime) {
           locCust = value;
           locCustTime = valueTime;
         }
@@ -1845,13 +1882,14 @@ function lookupCustomerByPhone(phone, serial) {
       }
     }
 
-    // موقع محفوظ؟ لا نعتمد إلا إحداثيات دبوس صريحة.
-    var savedCoords = exactCoordinatesFromRecord(locCust || cust);
-    var savedLink = savedCoords ? canonicalExactMapsUrl(savedCoords.lat,savedCoords.lng) : '';
-    var hasLocation = !!savedCoords;
+    // موقع محفوظ: إحداثيات صريحة أو رابط Google Maps أكده العميل.
+    var savedLocationRecord = locCust || cust;
+    var savedCoords = exactCoordinatesFromRecord(savedLocationRecord);
+    var savedLink = customerExactMapsUrl(savedLocationRecord);
+    var hasLocation = !!savedLink;
     if(hasLocation) {
-      _savedCustomerLat  = savedCoords.lat;
-      _savedCustomerLng  = savedCoords.lng;
+      _savedCustomerLat  = savedCoords ? savedCoords.lat : null;
+      _savedCustomerLng  = savedCoords ? savedCoords.lng : null;
       _savedCustomerLink = savedLink;
 
       // استعادة موقع العميل المحفوظ تلقائيًا للحجز الجديد.
@@ -1865,6 +1903,9 @@ function lookupCustomerByPhone(phone, serial) {
           document.getElementById('appointment_location_source').value = 'maps_link';
           _locLat = _savedCustomerLat; _locLng = _savedCustomerLng; _locSource = 'maps_link';
           showLocPreview(_locLat, _locLng);
+        } else {
+          document.getElementById('appointment_location_source').value = savedLocationRecord.locationSource || 'shared_maps_link';
+          _locLat = null; _locLng = null; _locSource = document.getElementById('appointment_location_source').value;
         }
       }
     }
@@ -2174,27 +2215,28 @@ function saveAppt(){
     data.serviceAreaCheckedAt = new Date().toISOString();
   }
 
-  // موقع العميل إلزامي ودقيق: لا يُحفظ اسم مدينة أو رابط مختصر بلا إحداثيات.
+  // موقع العميل إلزامي: إحداثيات صريحة أو رابط Google Maps فتحه المستخدم وأكده.
   var exactFormLocation = readAppointmentFormExactLocation();
   if(!exactFormLocation) {
-    return showToast('❌ يجب إدخال دبوس منزل يحتوي إحداثيات ثم الضغط على «التحقق من الرابط»');
+    return showToast('❌ يجب إدخال رابط Google Maps للموقع ثم الضغط على «التحقق من الرابط»');
   }
   var locVerified = document.getElementById('appointment_location_verified').value === 'true' ||
                     document.getElementById('chk_loc_verified').checked;
   if(!locVerified) {
-    return showToast('❌ افتح معاينة الموقع وتأكد أن الدبوس صحيح، ثم فعّل مربع التأكيد');
+    return showToast('❌ افتح رابط الموقع وتأكد أنه صحيح، ثم فعّل مربع التأكيد');
   }
   var mapsLink = exactFormLocation.mapsLink;
   var lat = exactFormLocation.lat;
   var lng = exactFormLocation.lng;
   var locSrc = document.getElementById('appointment_location_source').value || 'manual_coordinates';
   document.getElementById('appointment_maps_link').value = mapsLink;
-  document.getElementById('appointment_lat').value = lat;
-  document.getElementById('appointment_lng').value = lng;
+  document.getElementById('appointment_lat').value = exactFormLocation.hasCoordinates ? lat : '';
+  document.getElementById('appointment_lng').value = exactFormLocation.hasCoordinates ? lng : '';
   document.getElementById('appointment_location_verified').value = 'true';
   data.mapsLink = mapsLink;
-  data.lat = lat;
-  data.lng = lng;
+  // null يحذف أي إحداثيات قديمة حتى لا يفتح النظام موقعًا سابقًا بدل الرابط الجديد.
+  data.lat = exactFormLocation.hasCoordinates ? lat : null;
+  data.lng = exactFormLocation.hasCoordinates ? lng : null;
   data.locationSource = locSrc;
   data.locationVerified = true;
 
@@ -2687,6 +2729,7 @@ function exactCoordinatesFromRecord(record) {
   var hasGenericLink = links.some(function(link){ return link && isGenericCityMapsUrl(link); });
   var source = String(record.locationSource || record.geoSource || '').toLowerCase();
   var directAllowed = source !== 'viewport_coordinates' &&
+    source !== 'shared_maps_link' && source !== 'shared_short_maps_link' &&
     (!hasGenericLink || /^(?:gps|manual_coordinates|query_coordinates|place_coordinates)$/.test(source));
 
   var pairs = [
@@ -2718,7 +2761,8 @@ function exactCoordinatesFromRecord(record) {
 
 function appointmentMapsUrl(a){
   var coords = exactCoordinatesFromRecord(a);
-  return coords ? canonicalExactMapsUrl(coords.lat,coords.lng) : '';
+  if(coords) return canonicalExactMapsUrl(coords.lat,coords.lng);
+  return firstTrustedLocationUrl(a);
 }
 
 function normalizeLocationPhone(value){
@@ -2731,7 +2775,8 @@ function normalizeLocationPhone(value){
 
 function customerExactMapsUrl(customer){
   var coords = exactCoordinatesFromRecord(customer);
-  return coords ? canonicalExactMapsUrl(coords.lat,coords.lng) : '';
+  if(coords) return canonicalExactMapsUrl(coords.lat,coords.lng);
+  return firstTrustedLocationUrl(customer);
 }
 
 // يعيد رابط الموعد مباشرة، أو يبحث عنه في ملف العميل باستخدام رقم الجوال.
@@ -2750,21 +2795,24 @@ function resolveExactAppointmentLocation(a){
       var customer = child.val() || {};
       if(normalizeLocationPhone(customer.phone || customer.mobile || customer.whatsapp) === wantedPhone){
         var coords = exactCoordinatesFromRecord(customer);
-        if(!coords) return;
+        var link = coords ? canonicalExactMapsUrl(coords.lat,coords.lng) : firstTrustedLocationUrl(customer);
+        if(!link) return;
         var timestamp = Date.parse(customer.updatedAt || customer.createdAt || '') ||
           Number(customer.updatedAt || customer.createdAt || 0) || 0;
         var verified = customer.locationVerified === true || customer.locationVerified === 'true';
         if(!best || (verified && !best.verified) || (verified === best.verified && timestamp >= best.timestamp)) {
-          best = {coords:coords,timestamp:timestamp,verified:verified};
+          best = {coords:coords,link:link,timestamp:timestamp,verified:verified,source:customer.locationSource || ''};
         }
       }
     });
-    var exact = best ? canonicalExactMapsUrl(best.coords.lat,best.coords.lng) : '';
+    var exact = best ? best.link : '';
     if(best) {
-      a.lat = best.coords.lat;
-      a.lng = best.coords.lng;
+      if(best.coords) {
+        a.lat = best.coords.lat;
+        a.lng = best.coords.lng;
+      }
       a.mapsLink = exact;
-      a.locationSource = best.coords.source || 'customer_record';
+      a.locationSource = (best.coords && best.coords.source) || best.source || 'customer_record';
       a.locationVerified = best.verified;
     }
     return exact;

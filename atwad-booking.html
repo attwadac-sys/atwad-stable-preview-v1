@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="atwad-build" content="2026-07-31-booking-simple-v3">
+<meta name="atwad-build" content="2026-08-28-booking-location-final-v1">
 <title>مؤسسة أطواد - حجز خدمة</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
@@ -348,12 +348,12 @@ body{font-family:'Tajawal',sans-serif;font-size:16px;background:linear-gradient(
       <div class="offer-tile" id="ct5" onclick="selClean(9,540)">
         <div class="offer-badge">⚡ عرض مؤقت / Special Offer</div>
         <div style="font-size:36px;margin-bottom:6px;">🏠❄️</div>
-        <div class="o-title" style="font-size:18px;font-weight:800;">من 5 إلى 9 مكيفات / 5-9 AC Units</div>
+        <div class="o-title" style="font-size:18px;font-weight:800;">9 مكيفات فأكثر / 9+ AC Units</div>
         <div style="margin-top:8px;">
           <span style="color:#FEF08A;font-size:26px;font-weight:900;">60 SAR</span>
           <span style="color:rgba(255,255,255,.9);font-size:14px;font-weight:600;"> للمكيف / per unit</span>
         </div>
-        <div style="color:rgba(255,255,255,.85);font-size:14px;font-weight:600;margin-top:8px;">10 مكيفات فأكثر: 55 ريال للمكيف / 10+ units: 55 SAR each</div>
+        <div style="color:rgba(255,255,255,.85);font-size:14px;font-weight:600;margin-top:8px;">اختر العدد من 9 إلى 30 — من 10 فأكثر: 55 ريال للمكيف</div>
       </div>
     </div>
     </div>
@@ -365,6 +365,7 @@ body{font-family:'Tajawal',sans-serif;font-size:16px;background:linear-gradient(
         <div class="units-num"><div class="n" id="units-display">1</div><div class="sub">مكيف</div></div>
         <button class="units-btn minus" onclick="changeUnits(-1)">−</button>
       </div>
+      <div id="large-order-note" style="display:none;margin-top:12px;padding:9px 11px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:9px;color:#92400E;font-size:12px;font-weight:700;line-height:1.6;">📋 طلب كبير: ستتواصل المؤسسة معك لتأكيد مدة العمل وعدد فرق الفنيين.</div>
     </div>
     <div class="err-msg" id="e_svc">الرجاء اختيار نوع الخدمة</div>
 
@@ -403,7 +404,7 @@ body{font-family:'Tajawal',sans-serif;font-size:16px;background:linear-gradient(
       <!-- رسالة استخراج الإحداثيات من الرابط الكامل -->
       <div class="maps-ok-coords" id="maps-ok-coords">✅ تم استخراج الإحداثيات من الرابط</div>
       <!-- رسالة الرابط المختصر -->
-      <div class="maps-shortlink" id="maps-shortlink">⚠️ الرابط المختصر وحده لا يثبت إحداثيات المنزل. اضغط «استخدام موقعي الحالي».</div>
+      <div class="maps-shortlink" id="maps-shortlink">ℹ️ افتح رابط Google Maps وتأكد أنه يشير إلى المنزل، ثم فعّل مربع التأكيد.</div>
       <!-- حقول الإحداثيات المخفية -->
       <input type="hidden" id="f_lat">
       <input type="hidden" id="f_lng">
@@ -879,6 +880,7 @@ var selectedLat            = null;
 var selectedLng            = null;
 var selectedAccuracy       = null; // دقة الموقع بالمتر
 var selectedLocationSource = '';   // 'gps' | 'maps_link' | 'manual_link'
+var largeCleaningSelection = false;
 
 // ============================================================
 // isValidCoordinates — دالة تحقق موحدة من صحة الإحداثيات
@@ -961,8 +963,14 @@ function isGenericBookingMapsUrl(value) {
 function readBookingExactCoordinates() {
   var lat = Number(document.getElementById('f_lat').value);
   var lng = Number(document.getElementById('f_lng').value);
-  if(!isValidCoordinates(lat,lng)) return null;
-  return {lat:lat,lng:lng,mapsLink:canonicalBookingMapsUrl(lat,lng)};
+  if(isValidCoordinates(lat,lng)) {
+    return {lat:lat,lng:lng,mapsLink:canonicalBookingMapsUrl(lat,lng),hasCoordinates:true};
+  }
+  var sharedLink = cleanMapsLocationValue(document.getElementById('f_maps_link').value);
+  if(isTrustedGoogleMapsLocationLink(sharedLink) && !isGenericBookingMapsUrl(sharedLink)) {
+    return {lat:null,lng:null,mapsLink:sharedLink,hasCoordinates:false};
+  }
+  return null;
 }
 
 // ============================================================
@@ -1075,7 +1083,7 @@ function confirmLocation() {
   var exact = readBookingExactCoordinates();
   if(!exact) {
     resetLocationConfirmed();
-    showGeoMsg('err','لم تُستخرج إحداثيات دقيقة. استخدم زر «موقعي الحالي».');
+    showGeoMsg('err','أدخل رابط Google Maps للموقع أو استخدم زر «موقعي الحالي».');
     return false;
   }
   if(selectedLocationSource === 'gps' && Number(selectedAccuracy) > 200) {
@@ -1090,6 +1098,14 @@ function confirmLocation() {
   document.getElementById('f_maps_link').value = exact.mapsLink;
   document.getElementById('f_addr').value = exact.mapsLink;
   S.addr = exact.mapsLink;
+  document.getElementById('maps-ok').textContent = exact.hasCoordinates
+    ? '✅ تم تسجيل موقع دقيق بالإحداثيات'
+    : '✅ تم تسجيل رابط Google Maps بعد تأكيده';
+  document.getElementById('maps-ok').style.display = 'block';
+  document.getElementById('maps-shortlink').style.display = 'none';
+  showGeoMsg('ok', exact.hasCoordinates
+    ? '✅ تم تأكيد دبوس الموقع.'
+    : '✅ تم تأكيد رابط الموقع وسيصل كما هو إلى المؤسسة والفني.');
   updateProgress();
   return true;
 }
@@ -1243,6 +1259,7 @@ function savedMapLink(record) {
     if(!/^https?:\/\//i.test(val) || isGenericBookingMapsUrl(val)) continue;
     var extracted = extractCoordinatesFromMapUrl(val);
     if(extracted) return canonicalBookingMapsUrl(extracted.lat,extracted.lng);
+    if(isTrustedGoogleMapsLocationLink(val)) return val;
   }
   return '';
 }
@@ -1374,9 +1391,13 @@ document.getElementById('f_date').min = todaySaudiDate();
 
 // ===== خانة العدد =====
 function changeUnits(dir){
-  var n=Math.max(1,Math.min(20,S.units+dir));
+  var minUnits=largeCleaningSelection?9:1;
+  var n=Math.max(minUnits,Math.min(30,S.units+dir));
   S.units=n;
   document.getElementById('units-display').textContent=n;
+  if(S.isClean) S.price=n>=10?n*55:(n>=5?n*60:S.price);
+  var note=document.getElementById('large-order-note');
+  if(note) note.style.display=n>=10?'block':'none';
 }
 
 // ===== الخدمة =====
@@ -1402,6 +1423,9 @@ function showWashingOptions(){
   document.getElementById('sv1').className='svc-card primary-service sel';
   document.getElementById('washing-options').className='washing-options show';
   S.service=''; S.serviceAr=''; S.price=0; S.isClean=false; S.units=1;
+  largeCleaningSelection=false;
+  document.getElementById('units-display').textContent='1';
+  var largeNote=document.getElementById('large-order-note'); if(largeNote) largeNote.style.display='none';
   document.getElementById('units-box').className='units-box';
   document.getElementById('e_svc').textContent='الرجاء اختيار عدد المكيفات للغسيل';
   document.getElementById('e_svc').className='err-msg';
@@ -1424,10 +1448,14 @@ function selClean(u,p){
 
   S.service='غسيل مكيفات'; S.serviceAr='غسيل مكيفات';
   S.isClean=true;
+  largeCleaningSelection=u>=9;
   if(u >= 10)    { S.units=u; S.price=u*55; }
   else if(u >= 5){ S.units=u; S.price=u*60; }
   else           { S.units=u; S.price=p; }
-  document.getElementById('units-box').className='units-box';
+  document.getElementById('units-display').textContent=S.units;
+  document.getElementById('units-box').className=largeCleaningSelection?'units-box show':'units-box';
+  var largeNote=document.getElementById('large-order-note');
+  if(largeNote) largeNote.style.display=S.units>=10?'block':'none';
   document.getElementById('e_svc').textContent='الرجاء اختيار نوع الخدمة';
   document.getElementById('e_svc').className='err-msg';
 }
@@ -1439,6 +1467,7 @@ function selSvc(nameAr,nameEn,price,id){
   document.getElementById('washing-options').className='washing-options';
   S.service=nameAr; S.serviceAr=nameAr;
   S.price=price; S.isClean=false;
+  largeCleaningSelection=false;
   S.units=parseInt(document.getElementById('units-display').textContent)||1;
   document.getElementById('units-box').className='units-box show';
   document.getElementById('e_svc').textContent='الرجاء اختيار نوع الخدمة';
@@ -1467,6 +1496,19 @@ function cleanMapsLocationValue(value){
   return link.replace(/[،,؛;.!?)\]\}]+$/g,'');
 }
 
+function isTrustedGoogleMapsLocationLink(value){
+  var link=String(value||'').trim();
+  if(!/^https?:\/\//i.test(link)) return false;
+  try {
+    var parsed=new URL(link);
+    var host=parsed.hostname.toLowerCase().replace(/^www\./,'');
+    return host==='maps.app.goo.gl' ||
+           (host==='goo.gl' && parsed.pathname.toLowerCase().indexOf('/maps')===0) ||
+           ((host==='google.com' || /(^|\.)google\.[a-z.]+$/i.test(host)) &&
+             (parsed.pathname.toLowerCase().indexOf('/maps')===0 || parsed.searchParams.has('q') || parsed.searchParams.has('query') || parsed.searchParams.has('destination')));
+  } catch(e) { return false; }
+}
+
 function validateMapsLink(val){
   var raw=val.trim();
   var link=cleanMapsLocationValue(raw);
@@ -1481,6 +1523,7 @@ function validateMapsLink(val){
   var isGeneric=link ? isGenericBookingMapsUrl(link) : false;
   var isShort=/(?:maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(link);
   var isValid=!!(extracted && !isGeneric);
+  var isTrustedLink=!!(link && isTrustedGoogleMapsLocationLink(link) && !isGeneric);
 
   okCoords.style.display='none';
   shortMsg.style.display='none';
@@ -1512,11 +1555,22 @@ function validateMapsLink(val){
     document.getElementById('geoOpenMap').href=exactLink;
     document.getElementById('geoVerifyWrap').style.display='block';
     showLocationPreview(selectedLat,selectedLng);
+  } else if(isTrustedLink) {
+    document.getElementById('f_maps_link').value=link;
+    document.getElementById('f_addr').value=link;
+    S.addr=link;
+    selectedLocationSource=isShort?'shared_short_maps_link':'shared_maps_link';
+    document.getElementById('f_maps_link').style.borderColor='var(--warning)';
+    document.getElementById('geoOpenMap').href=link;
+    document.getElementById('geoVerifyWrap').style.display='block';
+    shortMsg.textContent='ℹ️ افتح الرابط للتأكد أنه يشير إلى المنزل، ثم فعّل «تأكدت أن الموقع الظاهر صحيح».';
+    shortMsg.style.display='block';
+    err.className='err-msg';
   } else {
     document.getElementById('f_maps_link').style.borderColor=link.length>0?'var(--danger)':'#E2E8F0';
     if(link) {
       shortMsg.textContent=isShort
-        ? '⚠️ الرابط المختصر لا يكفي. اضغط «استخدام موقعي الحالي» لتثبيت إحداثيات المنزل.'
+        ? '❌ رابط Google Maps غير صالح. انسخ رابط الموقع مرة أخرى.'
         : (isGeneric
           ? '❌ هذا رابط مدينة جدة العامة وليس موقع المنزل. اضغط «استخدام موقعي الحالي».'
           : '⚠️ الرابط لا يحتوي إحداثيات دبوس قابلة للتحقق. استخدم زر الموقع الحالي.');
@@ -1834,7 +1888,7 @@ function buildSum(){
   if(!S.isClean) S.units=parseInt(document.getElementById('units-display').textContent)||S.units;
   var isWashing=S.serviceAr==='غسيل مكيفات';
   var total;
-  if(S.isClean){total=S.units>=5?S.units*60:S.price;}
+  if(S.isClean){total=S.units>=10?S.units*55:(S.units>=5?S.units*60:S.price);}
   else if(isWashing){if(S.units===1)total=110;else if(S.units===2)total=180;else if(S.units===3)total=240;else if(S.units===4)total=280;else total=S.units*60;}
   else{total=S.price;}
 
@@ -1895,7 +1949,7 @@ function submitBooking(){
     var exactBookingLocation=readBookingExactCoordinates();
     var finalLocationConfirmed=document.getElementById('f_location_verified').value==='true' ||
       !!document.getElementById('chk-location-verified').checked;
-    if(!exactBookingLocation) throw new Error('لم يتم تحديد إحداثيات المنزل. ارجع إلى بياناتك واضغط «استخدام موقعي الحالي».');
+    if(!exactBookingLocation) throw new Error('لم يتم تحديد موقع المنزل. أدخل رابط Google Maps أو استخدم زر «موقعي الحالي».');
     if(selectedLocationSource==='gps' && Number(selectedAccuracy)>200) throw new Error('دقة الموقع أضعف من 200 متر. أعد تحديد الموقع قبل إرسال الحجز.');
     if(!finalLocationConfirmed) throw new Error('يجب مراجعة دبوس الموقع وتأكيد أنه صحيح قبل إرسال الحجز.');
     S.addr=exactBookingLocation.mapsLink;
@@ -1943,12 +1997,15 @@ function submitBooking(){
     // السعر التقديري يُحسب من الخدمة، ولا يُطلب من العميل إدخاله.
     if(S.price > 0) bookingData.servicePrice = S.price;
 
-    // الموقع ليس اختياريًا: نحفظ دائمًا الرابط المولّد من الإحداثيات نفسها.
+    // الموقع ليس اختياريًا: نحفظ إما رابطًا مولدًا من الإحداثيات أو رابط Google Maps أكده العميل.
     var accuracyValue = document.getElementById('f_accuracy').value.trim();
     var parsedAccuracy = Number(accuracyValue);
     bookingData.mapsLink = exactBookingLocation.mapsLink;
-    bookingData.lat = exactBookingLocation.lat;
-    bookingData.lng = exactBookingLocation.lng;
+    if(exactBookingLocation.hasCoordinates) {
+      bookingData.lat = exactBookingLocation.lat;
+      bookingData.lng = exactBookingLocation.lng;
+    }
+    bookingData.locationSource = selectedLocationSource || (exactBookingLocation.hasCoordinates?'coordinates':'shared_maps_link');
     bookingData.locationVerified = true;
 
     // إضافة دقة الموقع إذا كانت صالحة
