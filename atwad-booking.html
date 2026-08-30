@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="atwad-build" content="2026-08-30-booking-location-confirm-clear-v2">
+<meta name="atwad-build" content="2026-08-30-booking-slot-consistency-v3">
 <title>مؤسسة أطواد - حجز خدمة</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
@@ -2039,7 +2039,9 @@ function submitBooking(){
     }).catch(function(err){
       console.error('[booking] submit failed:',err);
       var timedOut=err&&err.code==='BOOKING_TIMEOUT';
-      var isSlotConflict=err&&(/^FIREBASE_HTTP_(401|403)$/.test(err.code||'')||/الفترة المختارة/.test(err.message||''));
+      // لا نعتبر كل رفض صلاحيات «موعدًا محجوزًا». المحجوز الحقيقي فقط هو
+      // ما أثبتته معاملة أقفال الوقت برمز SLOT_TAKEN.
+      var isSlotConflict=err&&(err.code==='SLOT_TAKEN'||/هذا الوقت محجوز فعليًا/.test(err.message||''));
 
       // بعد أي خطأ أو انقطاع نتأكد من الأقفال أولاً: قد تكون الكتابة نجحت
       // ووصل الرد متأخرًا. إن لم نجد أقفال الطلب فلا نعرض الرقم كحجز مؤكد.
@@ -2132,6 +2134,61 @@ function returnToAppointmentStep(){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
+/**
+ * مسار احتياطي آمن عندما ترفض قواعد Firebase التحديث متعدد المسارات من الجذر.
+ * يحجز يوم الموعد بمعاملة واحدة، ولا يعتبر الفترة محجوزة إلا عند وجود قفل فعلي
+ * يملكه طلب آخر. ثم يكتب الحجز، ويزيل أقفاله إذا فشلت كتابة الحجز.
+ */
+function writePublicBookingWithTransaction(key,bookingData,lockBlocks){
+  if(!db) {
+    var unavailable=new Error('Firebase SDK unavailable');
+    unavailable.code='FIREBASE_UNAVAILABLE';
+    return Promise.reject(unavailable);
+  }
+  var ownerKey='bookings:'+key;
+  var blockedKey=null;
+  var dayRef=db.ref('slotLocks/'+bookingData.date);
+
+  return dayRef.transaction(function(day){
+    day=day||{};
+    for(var i=0;i<lockBlocks.length;i++){
+      var current=day[lockBlocks[i]];
+      if(current&&current.ownerKey!==ownerKey&&current.bookingKey!==key){
+        blockedKey=lockBlocks[i];
+        return;
+      }
+    }
+    lockBlocks.forEach(function(blockKey){
+      day[blockKey]={
+        bookingKey:key,
+        ownerKey:ownerKey,
+        createdAt:firebase.database.ServerValue.TIMESTAMP
+      };
+    });
+    return day;
+  }).then(function(result){
+    if(!result.committed){
+      var conflict=new Error('هذا الوقت محجوز فعليًا أو يتداخل مع موعد قائم.');
+      conflict.code='SLOT_TAKEN';
+      conflict.block=blockedKey;
+      throw conflict;
+    }
+    return db.ref('bookings/'+key).set(bookingData).catch(function(writeError){
+      // لا نترك أقفالًا يتيمة إذا فشل إنشاء سجل الحجز.
+      return dayRef.transaction(function(day){
+        if(!day) return day;
+        lockBlocks.forEach(function(blockKey){
+          var current=day[blockKey];
+          if(current&&(current.ownerKey===ownerKey||current.bookingKey===key)) delete day[blockKey];
+        });
+        return Object.keys(day).length?day:null;
+      }).catch(function(cleanupError){
+        console.error('[booking] lock cleanup failed:',cleanupError);
+      }).then(function(){ throw writeError; });
+    });
+  });
+}
+
 // إرسال الحجز عبر طلب HTTPS عادي؛ وهو أكثر ثباتًا على شبكات الجوال من انتظار
 // اتصال Firebase المستمر. المهلة تمنع بقاء العميل على "جاري الإرسال" بلا نهاية.
 function writePublicBooking(key,bookingData,timeoutMs){
@@ -2180,9 +2237,12 @@ function writePublicBooking(key,bookingData,timeoutMs){
   if(controller) requestOptions.signal=controller.signal;
   var requestPromise=fetch(url,requestOptions).then(function(response){
     if(!response.ok){
-      var httpError=new Error(response.status===401||response.status===403
-        ? 'الفترة المختارة محجوزة أو لم تُفعّل قواعد منع التداخل بعد.'
-        : 'Firebase HTTP '+response.status);
+      // قد ترفض القواعد التحديث الذري من جذر القاعدة رغم سماحها بالكتابة
+      // في المسارين كلٌ على حدة. عندها نستخدم معاملة اليوم الآمنة كمسار بديل.
+      if(response.status===401||response.status===403){
+        return writePublicBookingWithTransaction(key,bookingData,lockBlocks);
+      }
+      var httpError=new Error('Firebase HTTP '+response.status);
       httpError.code='FIREBASE_HTTP_'+response.status;
       throw httpError;
     }
