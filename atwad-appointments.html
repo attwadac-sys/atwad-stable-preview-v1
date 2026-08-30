@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="atwad-build" content="2026-08-28-appointments-location-final-v1">
+<meta name="atwad-build" content="2026-08-30-appointments-location-confirm-visible-v3">
 <title>مؤسسة أطواد - إدارة المواعيد</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap');
@@ -280,8 +280,8 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
 .loc-preview{margin-top:10px;display:none;}
 .loc-preview iframe{width:100%;height:220px;border:0;border-radius:10px;display:block;}
 .loc-preview-note{font-size:11px;color:var(--mist);margin-top:6px;}
-.loc-chk-row{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--slate);cursor:pointer;}
-.loc-chk-row input{width:15px;height:15px;accent-color:var(--success);}
+.loc-chk-row{display:flex;align-items:center;gap:9px;margin-top:9px;padding:10px 12px;background:#ECFDF5;border:1.5px solid #86EFAC;border-radius:9px;font-size:13px;font-weight:800;color:#166534;cursor:pointer;}
+.loc-chk-row input{width:20px;height:20px;accent-color:var(--success);flex-shrink:0;}
 .loc-save-row{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--slate);cursor:pointer;padding:6px 10px;background:var(--frost);border-radius:8px;border:1px dashed #CBD5E1;}
 .loc-save-row input{width:15px;height:15px;accent-color:var(--purple);}
 .client-found-msg{padding:8px 12px;background:#F0FFF4;border:1.5px solid #86EFAC;border-radius:9px;font-size:12px;color:#065F46;margin-bottom:10px;display:none;}
@@ -486,11 +486,12 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
         <div class="loc-preview" id="loc_preview">
           <iframe id="loc_preview_map" src="about:blank" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
           <p class="loc-preview-note">يرجى التأكد أن العلامة على موقع العميل الصحيح.</p>
-          <label class="loc-chk-row">
-            <input type="checkbox" id="chk_loc_verified" onchange="syncApptLocationConfirmation(this)">
-            <span>تم التأكد من أن الموقع صحيح</span>
-          </label>
         </div>
+        <!-- مستقل عن المعاينة حتى يظهر أيضًا مع روابط Google Maps المختصرة -->
+        <label class="loc-chk-row" id="loc_confirm_row" style="display:none;">
+          <input type="checkbox" id="chk_loc_verified" onchange="syncApptLocationConfirmation(this)">
+          <span>✅ فتحت الدبوس وتأكدت أن هذا موقع منزل العميل</span>
+        </label>
         <!-- تعارض الموقع -->
         <div class="loc-conflict-box" id="loc_conflict_box">
           <div>⚠️ يوجد موقع محفوظ سابقًا لهذا العميل.</div>
@@ -1540,6 +1541,7 @@ function editAppt(id){
     document.getElementById('appointment_maps_link').value = savedLink;
     document.getElementById('loc_open_btn').href = savedLink;
     document.getElementById('loc_open_btn').style.display = 'inline-flex';
+    document.getElementById('loc_confirm_row').style.display = 'flex';
     console.log('[editAppt] exact mapsLink →', savedLink);
   } else {
     showLocMsg('err','الموقع القديم غير دقيق أو لا يحتوي إحداثيات. أدخل دبوس المنزل ثم اضغط «التحقق من الرابط».');
@@ -1710,6 +1712,7 @@ function showLocPreview(lat, lng) {
   var url = 'https://www.google.com/maps?q=' + encodeURIComponent(lat+','+lng) + '&z=17&output=embed';
   document.getElementById('loc_preview_map').src = url;
   document.getElementById('loc_preview').style.display = 'block';
+  document.getElementById('loc_confirm_row').style.display = 'flex';
 }
 
 // ============================================================
@@ -1724,6 +1727,7 @@ function verifyApptLocation() {
   document.getElementById('loc_conflict_box').style.display = 'none';
   document.getElementById('chk_loc_verified').checked = false;
   document.getElementById('appointment_location_verified').value = 'false';
+  document.getElementById('loc_confirm_row').style.display = 'none';
 
   var extracted = extractCoordinatesFromMapUrl(link);
   var trustedLink = isTrustedGoogleMapsLocationUrl(link);
@@ -1734,6 +1738,7 @@ function verifyApptLocation() {
     document.getElementById('appointment_lng').value = '';
     document.getElementById('appointment_location_source').value = '';
     document.getElementById('loc_open_btn').style.display = 'none';
+    document.getElementById('loc_confirm_row').style.display = 'none';
     document.getElementById('loc_save_row').style.display = 'none';
     showLocMsg('err','هذا ليس رابط Google Maps صالحًا لموقع العميل، أو أنه رابط مدينة عامة.');
     return;
@@ -1747,6 +1752,7 @@ function verifyApptLocation() {
     document.getElementById('appointment_location_source').value=_locSource;
     document.getElementById('loc_open_btn').href=link;
     document.getElementById('loc_open_btn').style.display='inline-flex';
+    document.getElementById('loc_confirm_row').style.display='flex';
     document.getElementById('loc_save_row').style.display=_foundCustomerKey?'flex':'none';
     showLocMsg('ok','✅ رابط Google Maps صالح. افتحه للتأكد من المنزل ثم فعّل مربع تأكيد الموقع.');
     return;
@@ -1784,6 +1790,7 @@ function useOldLocation() {
   if(_locLat && _locLng) showLocPreview(_locLat, _locLng);
   document.getElementById('loc_conflict_box').style.display = 'none';
   document.getElementById('loc_save_row').style.display = 'none';
+  document.getElementById('loc_confirm_row').style.display = 'flex';
   showLocMsg('ok','تم استخدام الموقع السابق للعميل');
 }
 function useNewLocation() {
@@ -1897,6 +1904,7 @@ function lookupCustomerByPhone(phone, serial) {
         document.getElementById('appointment_maps_link').value = _savedCustomerLink;
         document.getElementById('loc_open_btn').href = _savedCustomerLink;
         document.getElementById('loc_open_btn').style.display = 'inline-flex';
+        document.getElementById('loc_confirm_row').style.display = 'flex';
         if(isValidCoordinates(_savedCustomerLat,_savedCustomerLng)) {
           document.getElementById('appointment_lat').value = _savedCustomerLat;
           document.getElementById('appointment_lng').value = _savedCustomerLng;
@@ -1938,6 +1946,7 @@ function resetLocFields() {
   document.getElementById('loc_msg').style.display = 'none';
   document.getElementById('loc_preview').style.display = 'none';
   document.getElementById('loc_preview_map').src = 'about:blank';
+  document.getElementById('loc_confirm_row').style.display = 'none';
   document.getElementById('loc_open_btn').style.display = 'none';
   document.getElementById('loc_conflict_box').style.display = 'none';
   document.getElementById('loc_save_row').style.display = 'none';
@@ -2154,6 +2163,32 @@ function endManualSave(){
   if(btn){btn.disabled=false;btn.textContent='💾 حفظ الموعد';}
 }
 
+/** يمنع بقاء زر الحفظ معلقًا إلى ما لا نهاية عند ضعف الشبكة أو تأخر Firebase. */
+function withSaveTimeout(promise, timeoutMs){
+  return new Promise(function(resolve,reject){
+    var finished=false;
+    var timer=setTimeout(function(){
+      if(finished) return;
+      finished=true;
+      var err=new Error('SAVE_TIMEOUT');
+      err.code='SAVE_TIMEOUT';
+      reject(err);
+    }, timeoutMs || 20000);
+
+    Promise.resolve(promise).then(function(value){
+      if(finished) return;
+      finished=true;
+      clearTimeout(timer);
+      resolve(value);
+    },function(err){
+      if(finished) return;
+      finished=true;
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+
 function saveAppt(){
   if(manualSaveInProgress) return;
   const client=document.getElementById('f_client').value.trim();
@@ -2287,19 +2322,34 @@ function saveAppt(){
     var _oldBlocks  = atwadApptBlocks(_oldAppt);
     var _newHoldsSlot = appointmentHoldsSlot(data);
 
-    // الموعد المكتمل أو الملغي لا يحتفظ بأي قفل. أما الموعد النشط فيحجز
-    // الفترة الجديدة أولًا، وإذا فشلت كتابة السجل تُعاد خريطة أقفاله القديمة.
-    var _claimPromise = _newHoldsSlot
-      ? claimSlotLocks(date, _newBlocks, _ownerKey)
-      : Promise.resolve(true);
-    _claimPromise.then(function() {
-      return db.ref(editingPath + editingFirebaseKey).update(data).catch(function(writeErr){
-        if(!_newHoldsSlot) throw writeErr;
-        return releaseSlotLocks(date,_ownerKey,_oldBlocks).then(function(){ throw writeErr; });
+    // تعديل الموقع أو بيانات العميل فقط لا يحتاج معاملة أقفال الوقت؛ تمريره
+    // عبر transaction كان قد يترك زر الحفظ معلقًا رغم عدم تغيير الجدول.
+    var _oldDuration = Number(_oldAppt.duration) || 60;
+    var _scheduleChanged =
+      String(_oldAppt.date || '') !== String(date || '') ||
+      String(_oldAppt.time || '') !== String(data.time || '') ||
+      _oldDuration !== Number(data.duration) ||
+      appointmentHoldsSlot(_oldAppt) !== _newHoldsSlot;
+
+    var _savePromise;
+    if(!_scheduleChanged) {
+      _savePromise = db.ref(editingPath + editingFirebaseKey).update(data);
+    } else {
+      // عند تغيير الوقت/المدة/الحالة فقط: احجز الفترة الجديدة ثم حرر القديمة.
+      var _claimPromise = _newHoldsSlot
+        ? claimSlotLocks(date, _newBlocks, _ownerKey)
+        : Promise.resolve(true);
+      _savePromise = _claimPromise.then(function() {
+        return db.ref(editingPath + editingFirebaseKey).update(data).catch(function(writeErr){
+          if(!_newHoldsSlot) throw writeErr;
+          return releaseSlotLocks(date,_ownerKey,_oldBlocks).then(function(){ throw writeErr; });
+        });
+      }).then(function() {
+        return releaseSlotLocks(date, _ownerKey, _newHoldsSlot ? _newBlocks : []);
       });
-    }).then(function() {
-      return releaseSlotLocks(date, _ownerKey, _newHoldsSlot ? _newBlocks : []);
-    }).then(function() {
+    }
+
+    withSaveTimeout(_savePromise, 20000).then(function() {
         // حفظ موقع العميل — داخل try/catch حتى لا يمنع إغلاق النافذة
         if(_saveToCustomer && _custKey && _mapsLink) {
           try {
@@ -2319,7 +2369,9 @@ function saveAppt(){
       })
       .catch(function(e){
         endManualSave();
-        if(e && e.code === 'SLOT_TAKEN') {
+        if(e && e.code === 'SAVE_TIMEOUT') {
+          showToast('⚠️ تأخر اتصال الحفظ. أُعيد تفعيل الزر؛ حدّث الصفحة وتأكد من الموعد قبل إعادة المحاولة.');
+        } else if(e && e.code === 'SLOT_TAKEN') {
           showToast('❌ تعذر التعديل: الفترة الجديدة محجوزة. بقي الموعد السابق وأقفاله كما هي.');
         } else {
           showToast('❌ خطأ في الحفظ: ' + ((e && e.message) ? e.message : e));
@@ -2354,14 +2406,14 @@ function saveAppt(){
 
     var _newHoldsSlot = appointmentHoldsSlot(data);
     var _newClaim = _newHoldsSlot ? claimSlotLocks(date, _blocksNew, _newOwner) : Promise.resolve(true);
-    _newClaim
+    var _newSavePromise = _newClaim
       .then(function() {
         // إن فشلت كتابة الموعد نُحرر الأقفال حتى لا تبقى يتيمة
         return _newRef.set(data).catch(function(writeErr) {
           return releaseSlotLocks(date, _newOwner, []).then(function(){ throw writeErr; });
         });
-      })
-      .then(function() {
+      });
+    withSaveTimeout(_newSavePromise, 20000).then(function() {
         if(_saveToCustomerNew && _custKeyNew && _mapsLinkNew) {
           try {
             saveLocationToCustomer(_custKeyNew, {
@@ -2379,7 +2431,9 @@ function saveAppt(){
       })
       .catch(function(e){
         endManualSave();
-        if(e && e.code === 'SLOT_TAKEN') {
+        if(e && e.code === 'SAVE_TIMEOUT') {
+          showToast('⚠️ تأخر اتصال الحفظ. أُعيد تفعيل الزر؛ حدّث الصفحة وتأكد من الموعد قبل إعادة المحاولة.');
+        } else if(e && e.code === 'SLOT_TAKEN') {
           showToast('❌ الفترة محجوزة لموعد آخر أو لحجز إلكتروني. اختر وقتًا آخر.');
         } else {
           showToast('❌ خطأ في الحفظ: ' + ((e && e.message) ? e.message : e));
@@ -2484,7 +2538,7 @@ function rescheduleChoice(choice) {
   var _blocksMove = atwadBlocks(_startMove, _startMove + atwadDuration(newData));
 
   // 1) احجز الفترة الجديدة. عند الفشل يبقى الموعد القديم وأقفاله سليمين.
-  claimSlotLocks(newData.date || date, _blocksMove, _newOwner)
+  var _reschedulePromise = claimSlotLocks(newData.date || date, _blocksMove, _newOwner)
     .then(function() {
       // 2) نفّذ الترحيل ذرّيًا؛ وإن فشل حرر أقفال الفترة الجديدة فقط
       return db.ref().update(atomicUpdates).catch(function(writeErr) {
@@ -2496,8 +2550,8 @@ function rescheduleChoice(choice) {
       // 3) بعد نجاح الترحيل فقط: حرر أقفال الموعد القديم وحده
       if(_oldDate) return releaseSlotLocks(_oldDate, _oldOwner, []);
       return true;
-    })
-    .then(function() {
+    });
+  withSaveTimeout(_reschedulePromise, 20000).then(function() {
       // حفظ الموقع إن طُلب — خطأه لا يوقف العملية
       if(_saveToCustomer && _custKey && _mapsLink) {
         try {
@@ -2514,7 +2568,9 @@ function rescheduleChoice(choice) {
     })
     .catch(function(e){
       endManualSave();
-      if(e && e.code === 'SLOT_TAKEN') {
+      if(e && e.code === 'SAVE_TIMEOUT') {
+        showToast('⚠️ تأخر اتصال الترحيل. أُعيد تفعيل الزر؛ حدّث الصفحة وتأكد من الموعدين قبل إعادة المحاولة.');
+      } else if(e && e.code === 'SLOT_TAKEN') {
         showToast('❌ تعذر الترحيل: الفترة الجديدة محجوزة. لم يتغير الموعد الحالي.');
       } else {
         showToast('❌ خطأ في الحفظ: ' + ((e && e.message) ? e.message : e));

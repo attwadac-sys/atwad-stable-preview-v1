@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="atwad-build" content="2026-08-28-booking-location-final-v1">
+<meta name="atwad-build" content="2026-08-30-booking-location-confirm-clear-v2">
 <title>مؤسسة أطواد - حجز خدمة</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
@@ -197,6 +197,8 @@ body{font-family:'Tajawal',sans-serif;font-size:16px;background:linear-gradient(
 .geo-open-map-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:8px;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:700;color:#1E40AF;cursor:pointer;text-decoration:none;margin-bottom:8px;}
 .geo-chk-label{display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;color:var(--slate);}
 .geo-chk-label input{width:16px;height:16px;margin-top:1px;flex-shrink:0;accent-color:var(--success);}
+.geo-confirm-main{display:block;width:100%;border:0;border-radius:9px;background:linear-gradient(135deg,#16A34A,#22C55E);color:#fff;padding:11px 14px;margin:2px 0 9px;font-family:'Tajawal',sans-serif;font-size:14px;font-weight:900;cursor:pointer;box-shadow:0 4px 12px rgba(34,197,94,.22);}
+.geo-confirm-main.confirmed{background:#166534;}
 /* قسم معاينة الخريطة */
 .location-preview-section{margin-top:14px;padding:12px;border:1px solid #b7dff5;border-radius:14px;background:#f7fcff;}
 .location-preview-title{font-size:13px;font-weight:700;color:var(--deep);margin-bottom:8px;}
@@ -404,7 +406,7 @@ body{font-family:'Tajawal',sans-serif;font-size:16px;background:linear-gradient(
       <!-- رسالة استخراج الإحداثيات من الرابط الكامل -->
       <div class="maps-ok-coords" id="maps-ok-coords">✅ تم استخراج الإحداثيات من الرابط</div>
       <!-- رسالة الرابط المختصر -->
-      <div class="maps-shortlink" id="maps-shortlink">ℹ️ افتح رابط Google Maps وتأكد أنه يشير إلى المنزل، ثم فعّل مربع التأكيد.</div>
+      <div class="maps-shortlink" id="maps-shortlink">ℹ️ افتح رابط Google Maps، ثم اضغط الزر الأخضر «نعم، هذا موقع المنزل».</div>
       <!-- حقول الإحداثيات المخفية -->
       <input type="hidden" id="f_lat">
       <input type="hidden" id="f_lng">
@@ -421,10 +423,11 @@ body{font-family:'Tajawal',sans-serif;font-size:16px;background:linear-gradient(
       <div class="geo-msg" id="geoMsg"></div>
       <!-- نتائج تحديد الموقع: زر التأكيد + مربع التحقق — تظهر بعد النجاح -->
       <div class="geo-verify-wrap" id="geoVerifyWrap">
-        <a class="geo-open-map-btn" id="geoOpenMap" href="#" target="_blank">🗺️ فتح الموقع للتأكد</a>
+        <a class="geo-open-map-btn" id="geoOpenMap" href="#" target="_blank" rel="noopener">1️⃣ فتح الموقع للتأكد</a>
+        <button type="button" class="geo-confirm-main" id="confirmSharedLocationBtn" onclick="confirmLocation()">2️⃣ نعم، هذا موقع المنزل</button>
         <label class="geo-chk-label">
           <input type="checkbox" id="chk-location-verified" onchange="syncBookingLocationConfirmation(this)">
-          <span>تأكدت أن الموقع الظاهر صحيح</span>
+          <span>تم تأكيد أن الموقع الظاهر هو موقع المنزل الصحيح</span>
         </label>
       </div>
       <!-- قسم معاينة الخريطة داخل الصفحة — يظهر عند توفر إحداثيات صالحة -->
@@ -1094,6 +1097,11 @@ function confirmLocation() {
   document.getElementById('f_location_verified').value = 'true';
   var chk = document.getElementById('chk-location-verified');
   if(chk) chk.checked = true;
+  var mainConfirmBtn = document.getElementById('confirmSharedLocationBtn');
+  if(mainConfirmBtn) {
+    mainConfirmBtn.textContent = '✅ تم تأكيد موقع المنزل';
+    mainConfirmBtn.classList.add('confirmed');
+  }
   document.getElementById('locationPreviewSection').classList.add('confirmed');
   document.getElementById('f_maps_link').value = exact.mapsLink;
   document.getElementById('f_addr').value = exact.mapsLink;
@@ -1166,6 +1174,11 @@ function resetLocationConfirmed() {
   document.getElementById('f_location_verified').value = 'false';
   var chk = document.getElementById('chk-location-verified');
   if(chk) chk.checked = false;
+  var mainConfirmBtn = document.getElementById('confirmSharedLocationBtn');
+  if(mainConfirmBtn) {
+    mainConfirmBtn.textContent = '2️⃣ نعم، هذا موقع المنزل';
+    mainConfirmBtn.classList.remove('confirmed');
+  }
   var section = document.getElementById('locationPreviewSection');
   if(section) section.classList.remove('confirmed');
   if(document.getElementById('probProgressFill')) updateProgress();
@@ -1563,7 +1576,7 @@ function validateMapsLink(val){
     document.getElementById('f_maps_link').style.borderColor='var(--warning)';
     document.getElementById('geoOpenMap').href=link;
     document.getElementById('geoVerifyWrap').style.display='block';
-    shortMsg.textContent='ℹ️ افتح الرابط للتأكد أنه يشير إلى المنزل، ثم فعّل «تأكدت أن الموقع الظاهر صحيح».';
+    shortMsg.textContent='ℹ️ الخطوة 1: افتح الرابط. الخطوة 2: اضغط الزر الأخضر «نعم، هذا موقع المنزل».';
     shortMsg.style.display='block';
     err.className='err-msg';
   } else {
