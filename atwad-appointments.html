@@ -340,7 +340,7 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
         <button onclick="openNotifications()" style="padding:7px 12px;border-radius:10px;border:1.5px solid #E2E8F0;background:#fff;font-family:'Tajawal',sans-serif;font-size:12px;cursor:pointer;color:var(--slate);">&#128276;</button>
         <span id="notifBadge" style="display:none;position:absolute;top:-6px;right:-6px;background:#EF4444;color:#fff;border-radius:50%;width:16px;height:16px;font-size:9px;font-weight:700;align-items:center;justify-content:center;font-family:'Tajawal',sans-serif;">0</span>
       </div>
-      <button onclick="openLockRepair()" title="فحص أقفال المواعيد وإصلاح الناقص منها" style="padding:7px 12px;border-radius:10px;border:1.5px solid #BFDBFE;background:#EFF6FF;color:#1E40AF;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">&#128274; فحص الأقفال</button>
+      <button onclick="openLockRepair()" title="فحص أقفال المواعيد وإصلاح الناقص منها" style="padding:7px 12px;border-radius:10px;border:1.5px solid #BFDBFE;background:#EFF6FF;color:#1E40AF;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">&#128274; فحص الأقفال والتداخلات</button>
       <button class="btn-primary" onclick="openNewAppt()" style="padding:8px 14px;font-size:12px;">＋ موعد</button>
       <button onclick="openWaitingList(null)" style="padding:7px 12px;background:#FEF9C3;color:#92400E;border:1.5px solid #FDE68A;border-radius:10px;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px;">
         &#128196; <span id="waitingBadge" style="background:#EF4444;color:#fff;border-radius:50%;width:16px;height:16px;display:none;align-items:center;justify-content:center;font-size:9px;font-weight:700;margin-right:2px;"></span>
@@ -581,7 +581,7 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
       <button class="modal-close" onclick="document.getElementById('lockRepairModal').classList.remove('open')">×</button>
     </div>
     <div style="padding:4px 2px 10px;font-size:12px;color:#64748B;line-height:1.8;">
-      الفحص للقراءة فقط ولا يعدّل شيئًا. الإصلاح ينشئ الأقفال الناقصة فقط،
+      الفحص يعرض التداخلات بالتفصيل وهو للقراءة فقط ولا يعدّل المواعيد. الإصلاح ينشئ الأقفال الناقصة فقط،
       ولا يستبدل قفلًا قائمًا، ولا يلغي أو يحذف أو ينقل أي موعد.
     </div>
     <div id="lockRepairBody" style="max-height:46vh;overflow:auto;font-size:12px;"></div>
@@ -2619,12 +2619,76 @@ function rescheduleChoice(choice) {
    ============================================================ */
 var _lockScan = null;
 
+
+
+/** قائمة التداخلات الفعلية بين المواعيد النشطة — قراءة فقط ولا تعدّل Firebase */
+function buildReadableConflictPairs(){
+  var byDate={}, pairs=[];
+  (appointments||[]).forEach(function(a){
+    if(!a||!a.date||a.date<today()||!appointmentIsActive(a)) return;
+    if(!atwadRange(a)) return;
+    (byDate[a.date]=byDate[a.date]||[]).push(a);
+  });
+  Object.keys(byDate).sort().forEach(function(date){
+    var list=byDate[date];
+    for(var i=0;i<list.length;i++){
+      for(var j=i+1;j<list.length;j++){
+        var a=list[i], b=list[j], ra=atwadRange(a), rb=atwadRange(b);
+        if(!ra||!rb||!atwadOverlaps(ra.start,ra.end,rb.start,rb.end)) continue;
+        pairs.push({date:date,a:a,b:b,overlapStart:Math.max(ra.start,rb.start),overlapEnd:Math.min(ra.end,rb.end)});
+      }
+    }
+  });
+  return pairs;
+}
+
+function readableSource(a){
+  return a&&a._source==='bookings' ? 'حجز إلكتروني' : 'موعد إداري';
+}
+function readableApptRange(a){
+  var r=atwadRange(a);
+  if(!r) return (a&&a.time)||'—';
+  var start=atwadMinutesToBlock(r.start).replace(/^(\d{2})(\d{2})$/,'$1:$2');
+  var end=atwadMinutesToBlock(r.end).replace(/^(\d{2})(\d{2})$/,'$1:$2');
+  return start+' – '+end;
+}
+function readableConflictCard(pair,index){
+  var a=pair.a||{}, b=pair.b||{};
+  var overlapStart=atwadMinutesToBlock(pair.overlapStart).replace(/^(\d{2})(\d{2})$/,'$1:$2');
+  var overlapEnd=atwadMinutesToBlock(pair.overlapEnd).replace(/^(\d{2})(\d{2})$/,'$1:$2');
+  var aId=String(a.id||a._fbKey||'').replace(/'/g,"\\'");
+  var bId=String(b.id||b._fbKey||'').replace(/'/g,"\\'");
+  return '<div style="border:1.5px solid #FECACA;background:#FFF7F7;border-radius:12px;padding:12px;margin-bottom:10px;">'+
+    '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:9px;">'+
+      '<strong style="color:#B91C1C;">تداخل '+(index+1)+'</strong>'+
+      '<span style="font-size:11px;color:#64748B;">'+atwadEsc(formatDate(pair.date))+'</span>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'+
+      '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:9px;padding:9px;">'+
+        '<div style="font-weight:800;color:#0C3B5E;">'+atwadEsc(a.client||a.name||'—')+'</div>'+
+        '<div style="margin-top:4px;">الوقت: <strong>'+atwadEsc(readableApptRange(a))+'</strong></div>'+
+        '<div style="color:#64748B;">'+atwadEsc(a.service||'—')+' • '+readableSource(a)+'</div>'+
+        (a.phone?'<div style="color:#64748B;">'+atwadEsc(a.phone)+'</div>':'')+
+        (aId?'<button type="button" onclick="document.getElementById(\'lockRepairModal\').classList.remove(\'open\');openDetail(\''+aId+'\')" style="margin-top:7px;padding:5px 9px;border:0;border-radius:7px;background:#E0F2FE;color:#0369A1;font-family:Tajawal,sans-serif;font-weight:700;cursor:pointer;">فتح الموعد</button>':'')+
+      '</div>'+
+      '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:9px;padding:9px;">'+
+        '<div style="font-weight:800;color:#0C3B5E;">'+atwadEsc(b.client||b.name||'—')+'</div>'+
+        '<div style="margin-top:4px;">الوقت: <strong>'+atwadEsc(readableApptRange(b))+'</strong></div>'+
+        '<div style="color:#64748B;">'+atwadEsc(b.service||'—')+' • '+readableSource(b)+'</div>'+
+        (b.phone?'<div style="color:#64748B;">'+atwadEsc(b.phone)+'</div>':'')+
+        (bId?'<button type="button" onclick="document.getElementById(\'lockRepairModal\').classList.remove(\'open\');openDetail(\''+bId+'\')" style="margin-top:7px;padding:5px 9px;border:0;border-radius:7px;background:#E0F2FE;color:#0369A1;font-family:Tajawal,sans-serif;font-weight:700;cursor:pointer;">فتح الموعد</button>':'')+
+      '</div>'+
+    '</div>'+
+    '<div style="margin-top:8px;padding:7px 9px;border-radius:8px;background:#FEE2E2;color:#991B1B;font-weight:700;">الفترة المتداخلة: '+overlapStart+' – '+overlapEnd+'</div>'+
+  '</div>';
+}
+
 function openLockRepair(){
   _lockScan = null;
   document.getElementById('lockRepairFixBtn').disabled = true;
   document.getElementById('lockRepairOrphanBtn').disabled = true;
   document.getElementById('lockRepairBody').innerHTML =
-    '<div style="padding:14px;color:#64748B;">اضغط «فحص» لعرض تقرير الأقفال قبل أي تعديل.</div>';
+    '<div style="padding:14px;color:#64748B;">اضغط «فحص» لعرض قائمة التداخلات بالتفصيل وتقرير الأقفال. الفحص للقراءة فقط ولا يغيّر أي موعد.</div>';
   document.getElementById('lockRepairModal').classList.add('open');
 }
 
@@ -2684,7 +2748,7 @@ function runLockScan(){
       });
     });
 
-    _lockScan = {missing:missing, held:held, orphans:orphans, clashes:plan.clashes};
+    _lockScan = {missing:missing, held:held, orphans:orphans, clashes:plan.clashes, readablePairs:buildReadableConflictPairs()};
     renderLockScan();
   }).catch(function(e){
     document.getElementById('lockRepairBody').innerHTML =
@@ -2704,6 +2768,16 @@ function renderLockScan(){
     if(items.length > 60) h += '<div style="color:#94A3B8;padding-top:6px;">…و' + (items.length-60) + ' أخرى</div>';
     h += '</div>';
   }
+  var readablePairs = r.readablePairs || buildReadableConflictPairs();
+  h += '<div style="margin-bottom:16px;padding:12px;background:#FFF1F2;border:1.5px solid #FECDD3;border-radius:12px;">'+
+       '<div style="font-weight:900;color:#9F1239;font-size:14px;margin-bottom:5px;">التداخلات الفعلية بين المواعيد ('+readablePairs.length+')</div>'+
+       '<div style="font-size:11px;color:#64748B;line-height:1.7;">هذه القائمة للمعاينة فقط. لا يتم تعديل أو حذف أو نقل أي موعد تلقائيًا.</div></div>';
+  if(!readablePairs.length){
+    h += '<div style="padding:12px;margin-bottom:16px;background:#F0FDF4;border:1px solid #86EFAC;border-radius:10px;color:#166534;font-weight:700;">لا توجد تداخلات فعلية في المواعيد النشطة القادمة.</div>';
+  } else {
+    readablePairs.forEach(function(pair,index){ h += readableConflictCard(pair,index); });
+  }
+
   section('أقفال ناقصة ستُنشأ', r.missing, '#166534', function(x){
     return '<span>' + x.date + ' — ' + x.block.slice(0,2) + ':' + x.block.slice(2) + '</span><span style="color:#64748B;">' + atwadEsc(x.owner) + '</span>';
   });
