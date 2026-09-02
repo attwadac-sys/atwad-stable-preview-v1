@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="atwad-build" content="2026-08-30-appointments-location-confirm-visible-v3">
+<meta name="atwad-build" content="2026-09-02-customer-whatsapp-change-cancel-v4">
 <title>مؤسسة أطواد - إدارة المواعيد</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap');
@@ -552,6 +552,26 @@ body{font-family:'Tajawal',sans-serif;background:#F1F5F9;color:var(--slate);}
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- إشعار العميل عبر واتساب بعد تغيير/إلغاء الموعد -->
+<div class="modal-overlay" id="customerNoticeModal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-hdr">
+      <h3 id="customerNoticeTitle">💬 إشعار العميل</h3>
+      <button class="modal-close" onclick="closeCustomerNotice()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--mist);line-height:1.7;margin-bottom:10px;">
+        الرسالة جاهزة للمراجعة. لن يتم إرسال أي شيء تلقائيًا؛ الإرسال يتم من واتساب بعد أن تراجعه بنفسك.
+      </div>
+      <div id="customerNoticePreview" style="white-space:pre-wrap;background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:12px;padding:14px;font-size:13px;line-height:1.9;color:var(--slate);max-height:42vh;overflow:auto;"></div>
+    </div>
+    <div class="modal-footer" style="flex-wrap:wrap;">
+      <button class="btn-cancel" onclick="closeCustomerNotice()">إغلاق بدون إرسال</button>
+      <button id="customerNoticeWaBtn" type="button" onclick="openCustomerNoticeWhatsApp()" style="padding:10px 18px;border:none;border-radius:9px;background:#25D366;color:#fff;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:800;cursor:pointer;">💬 فتح واتساب ومراجعة الرسالة</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== فحص وإصلاح أقفال المواعيد — يدوي بالكامل، بمعاينة قبل أي تعديل ===== -->
 <div class="modal-overlay" id="lockRepairModal">
@@ -1146,6 +1166,7 @@ function initFirebaseSync() {
           _fbKey: child.key,
           _source: 'bookings',
           id: 'B_' + child.key,
+          ref: b.ref || b.bookingRef || b.reference || '',
           client: b.client || b.name || '—',
           phone: b.phone || '',
           city: b.city || 'جدة',
@@ -2319,6 +2340,10 @@ function saveAppt(){
     var _newStart   = atwadParseTime(data.time);
     var _newBlocks  = atwadBlocks(_newStart, _newStart + data.duration);
     var _oldAppt    = findAppt(editingId) || findAppt(editingFirebaseKey) || {};
+    var _oldNotifySnapshot = Object.assign({}, _oldAppt);
+    var _customerScheduleChanged =
+      String(_oldAppt.date || '') !== String(data.date || '') ||
+      String(_oldAppt.time || '') !== String(data.time || '');
     var _oldBlocks  = atwadApptBlocks(_oldAppt);
     var _newHoldsSlot = appointmentHoldsSlot(data);
 
@@ -2363,9 +2388,14 @@ function saveAppt(){
         }
 
         showToast('✅ تم تحديث الموعد بنجاح');
+        var _notifyAfter = Object.assign({}, _oldNotifySnapshot, data);
         editingOriginalDate = '';
         closeModal();
         endManualSave();
+        if(_customerScheduleChanged) {
+          showCustomerNotice('reschedule', _notifyAfter.phone,
+            buildCustomerRescheduleMessage(_oldNotifySnapshot, _notifyAfter));
+        }
       })
       .catch(function(e){
         endManualSave();
@@ -2562,9 +2592,13 @@ function rescheduleChoice(choice) {
         } catch(locErr){ console.error('saveLocationToCustomer:', locErr); }
       }
       showToast('✅ تم ترحيل الموعد بنجاح. تم إنشاء الموعد الجديد، وتحويل الموعد السابق إلى حالة (ملغي).');
+      var _rescheduleBeforeNotice = Object.assign({}, previousData);
+      var _rescheduleAfterNotice = Object.assign({}, previousData, newData);
       editingOriginalDate = '';
       closeModal();
       endManualSave();
+      showCustomerNotice('reschedule', _rescheduleAfterNotice.phone,
+        buildCustomerRescheduleMessage(_rescheduleBeforeNotice, _rescheduleAfterNotice));
     })
     .catch(function(e){
       endManualSave();
@@ -3301,6 +3335,101 @@ function fallbackCopy(text) {
 }
 
 // ============================================================
+// إشعار العميل عند تغيير/إلغاء الموعد — تجهيز فقط دون إرسال تلقائي
+// ============================================================
+var _customerNoticePhone = '';
+var _customerNoticeMessage = '';
+
+function customerNoticePhone(phone) {
+  return normalizeSaudiPhone(phone || '');
+}
+
+function customerNoticeReference(a) {
+  var ref = String((a && (a.ref || a.bookingRef || a.reference)) || '').trim();
+  return ref;
+}
+
+function customerNoticeDate(value) {
+  if(!value) return '—';
+  try { return formatDateShort(value); } catch(e) { return value; }
+}
+
+function buildCustomerRescheduleMessage(before, after) {
+  before = before || {};
+  after = after || {};
+  var name = after.client || before.client || '';
+  var service = after.service || before.service || '';
+  var ref = customerNoticeReference(after) || customerNoticeReference(before);
+  var lines = [];
+  lines.push('مرحباً ' + name + ' 👋');
+  lines.push('');
+  lines.push('نود إشعاركم بأنه تم تعديل موعد خدمتكم لدى مؤسسة أطواد لصيانة المكيفات.');
+  lines.push('');
+  if(ref) lines.push('📋 رقم الحجز: ' + ref);
+  if(service) lines.push('🛠️ الخدمة: ' + service);
+  lines.push('');
+  lines.push('الموعد السابق:');
+  lines.push('📅 ' + customerNoticeDate(before.date));
+  lines.push('🕐 ' + (before.time || '—'));
+  lines.push('');
+  lines.push('الموعد الجديد:');
+  lines.push('📅 ' + customerNoticeDate(after.date));
+  lines.push('🕐 ' + (after.time || '—'));
+  lines.push('');
+  lines.push('نشكركم على تفهمكم، ويسعدنا خدمتكم.');
+  lines.push('مؤسسة أطواد لصيانة المكيفات');
+  lines.push('📞 0509720382');
+  return lines.join('\n');
+}
+
+function buildCustomerCancelMessage(a) {
+  a = a || {};
+  var ref = customerNoticeReference(a);
+  var lines = [];
+  lines.push('مرحباً ' + (a.client || '') + ' 👋');
+  lines.push('');
+  lines.push('نود إشعاركم بأنه تم إلغاء موعد خدمتكم لدى مؤسسة أطواد لصيانة المكيفات.');
+  lines.push('');
+  if(ref) lines.push('📋 رقم الحجز: ' + ref);
+  if(a.service) lines.push('🛠️ الخدمة: ' + a.service);
+  lines.push('📅 الموعد: ' + customerNoticeDate(a.date));
+  lines.push('🕐 الوقت: ' + (a.time || '—'));
+  lines.push('');
+  lines.push('إذا رغبتم في حجز موعد بديل، يسعدنا خدمتكم.');
+  lines.push('مؤسسة أطواد لصيانة المكيفات');
+  lines.push('📞 0509720382');
+  return lines.join('\n');
+}
+
+function showCustomerNotice(kind, phone, message) {
+  var waPhone = customerNoticePhone(phone);
+  if(!waPhone) {
+    showToast('⚠️ تم تنفيذ العملية، لكن رقم العميل غير صالح لواتساب');
+    return;
+  }
+  _customerNoticePhone = waPhone;
+  _customerNoticeMessage = message || '';
+  var title = document.getElementById('customerNoticeTitle');
+  if(title) title.textContent = kind === 'cancel' ? '💬 إشعار العميل بإلغاء الموعد' : '💬 إشعار العميل بتغيير الموعد';
+  var preview = document.getElementById('customerNoticePreview');
+  if(preview) preview.textContent = _customerNoticeMessage;
+  var modal = document.getElementById('customerNoticeModal');
+  if(modal) modal.classList.add('open');
+}
+
+function openCustomerNoticeWhatsApp() {
+  if(!_customerNoticePhone || !_customerNoticeMessage) return;
+  window.open('https://wa.me/' + _customerNoticePhone + '?text=' + encodeURIComponent(_customerNoticeMessage), '_blank', 'noopener');
+}
+
+function closeCustomerNotice() {
+  var modal = document.getElementById('customerNoticeModal');
+  if(modal) modal.classList.remove('open');
+  _customerNoticePhone = '';
+  _customerNoticeMessage = '';
+}
+
+// ============================================================
 // ١. زر التذكير — يفتح واتساب برسالة ودية تطلب تأكيد الموعد
 // ============================================================
 function sendReminder(id) {
@@ -3379,6 +3508,7 @@ function confirmCancel() {
       showToast('✅ تم إلغاء الموعد — السبب: ' + _cancelReason);
       showFreeSlot(a);
       closeCancelModal();
+      showCustomerNotice('cancel', a.phone, buildCustomerCancelMessage(a));
     }).catch(function(e){ showToast('❌ خطأ: ' + e.message); });
   } else {
     showToast('✅ تم إلغاء الموعد محلياً');
