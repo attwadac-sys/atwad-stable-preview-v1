@@ -2341,9 +2341,11 @@ function saveAppt(){
     var _newBlocks  = atwadBlocks(_newStart, _newStart + data.duration);
     var _oldAppt    = findAppt(editingId) || findAppt(editingFirebaseKey) || {};
     var _oldNotifySnapshot = Object.assign({}, _oldAppt);
+    var _oldNoticeTime = atwadParseTime(_oldNotifySnapshot.time);
+    var _newNoticeTime = atwadParseTime(data.time);
     var _customerScheduleChanged =
-      String(_oldAppt.date || '') !== String(data.date || '') ||
-      String(_oldAppt.time || '') !== String(data.time || '');
+      String(_oldNotifySnapshot.date || '') !== String(data.date || '') ||
+      _oldNoticeTime !== _newNoticeTime;
     var _oldBlocks  = atwadApptBlocks(_oldAppt);
     var _newHoldsSlot = appointmentHoldsSlot(data);
 
@@ -2393,7 +2395,7 @@ function saveAppt(){
         closeModal();
         endManualSave();
         if(_customerScheduleChanged) {
-          showCustomerNotice('reschedule', _notifyAfter.phone,
+          queueCustomerNotice('reschedule', _notifyAfter.phone,
             buildCustomerRescheduleMessage(_oldNotifySnapshot, _notifyAfter));
         }
       })
@@ -2597,7 +2599,7 @@ function rescheduleChoice(choice) {
       editingOriginalDate = '';
       closeModal();
       endManualSave();
-      showCustomerNotice('reschedule', _rescheduleAfterNotice.phone,
+      queueCustomerNotice('reschedule', _rescheduleAfterNotice.phone,
         buildCustomerRescheduleMessage(_rescheduleBeforeNotice, _rescheduleAfterNotice));
     })
     .catch(function(e){
@@ -3401,6 +3403,14 @@ function buildCustomerCancelMessage(a) {
   return lines.join('\n');
 }
 
+function queueCustomerNotice(kind, phone, message) {
+  // نؤجل إظهار النافذة قليلًا حتى تُغلق نافذة التعديل/الإلغاء بالكامل.
+  // هذا يمنع أن تُحجب رسالة واتساب خلف نافذة أخرى بعد نجاح الحفظ.
+  setTimeout(function(){
+    showCustomerNotice(kind, phone, message);
+  }, 180);
+}
+
 function showCustomerNotice(kind, phone, message) {
   var waPhone = customerNoticePhone(phone);
   if(!waPhone) {
@@ -3414,7 +3424,11 @@ function showCustomerNotice(kind, phone, message) {
   var preview = document.getElementById('customerNoticePreview');
   if(preview) preview.textContent = _customerNoticeMessage;
   var modal = document.getElementById('customerNoticeModal');
-  if(modal) modal.classList.add('open');
+  if(modal) {
+    modal.style.zIndex = '6000';
+    modal.style.display = 'flex';
+    modal.classList.add('open');
+  }
 }
 
 function openCustomerNoticeWhatsApp() {
@@ -3424,7 +3438,10 @@ function openCustomerNoticeWhatsApp() {
 
 function closeCustomerNotice() {
   var modal = document.getElementById('customerNoticeModal');
-  if(modal) modal.classList.remove('open');
+  if(modal) {
+    modal.classList.remove('open');
+    modal.style.display = 'none';
+  }
   _customerNoticePhone = '';
   _customerNoticeMessage = '';
 }
@@ -3506,9 +3523,10 @@ function confirmCancel() {
       return releaseSlotLocksForAppt(a);
     }).then(function() {
       showToast('✅ تم إلغاء الموعد — السبب: ' + _cancelReason);
-      showFreeSlot(a);
       closeCancelModal();
-      showCustomerNotice('cancel', a.phone, buildCustomerCancelMessage(a));
+      queueCustomerNotice('cancel', a.phone, buildCustomerCancelMessage(a));
+      // قائمة الانتظار تبقى متاحة، لكن لا نفتحها فوق رسالة العميل مباشرة.
+      setTimeout(function(){ showFreeSlot(a); }, 900);
     }).catch(function(e){ showToast('❌ خطأ: ' + e.message); });
   } else {
     showToast('✅ تم إلغاء الموعد محلياً');
@@ -3713,7 +3731,10 @@ function showFreeSlot(cancelledAppt) {
 
   if(scored.length) {
     showToast('🔍 يوجد ' + scored.length + ' عميل في قائمة الانتظار — افتح القائمة للبديل');
-    setTimeout(function(){ openWaitingList(cancelledAppt); }, 800);
+    setTimeout(function(){
+      var notice = document.getElementById('customerNoticeModal');
+      if(!(notice && notice.classList.contains('open'))) openWaitingList(cancelledAppt);
+    }, 800);
   } else {
     showToast('📢 تحرّر وقت: ' + formatDateShort(cancelledAppt.date) + ' — ' + (cancelledAppt.time||''));
   }
