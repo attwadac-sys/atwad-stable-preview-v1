@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="atwad-build" content="2026-08-30-booking-slot-consistency-v3">
+<meta name="atwad-build" content="2026-09-02-booking-save-rest-lock-fix-v4">
 <title>مؤسسة أطواد - حجز خدمة</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
@@ -2026,7 +2026,7 @@ function submitBooking(){
       bookingData.accuracy = parsedAccuracy;
     }
 
-    writePublicBooking(pendingBookingKey,bookingData,18000).then(function(){
+    writePublicBooking(pendingBookingKey,bookingData,30000).then(function(){
       document.getElementById('refNum').textContent=ref;
       document.getElementById('waLink').href=waUrl;
       goStep('OK');
@@ -2079,20 +2079,29 @@ function submitBooking(){
   }
 }
 
-/** يتحقق من أن أقفال اليوم تحمل مفتاح هذا الطلب — يمنع الحجز المكرر */
+/**
+ * يتحقق من أن الحجز وصل فعلاً إلى Firebase.
+ * الإصدار السابق كان يفحص slotLocks فقط؛ فإذا وصل سجل bookings وتأخر/فشل رد الأقفال
+ * كانت الصفحة تعرض للعميل «غير مؤكد» رغم أن الحجز موجود بالفعل.
+ */
 function confirmBookingAlreadySaved(date,bookingKey){
   if(!date||!bookingKey) return Promise.resolve(false);
-  var url='https://atwad-booking-default-rtdb.firebaseio.com/slotLocks/'+encodeURIComponent(date)+'.json';
-  return fetch(url,{cache:'no-store'}).then(function(r){
-    if(!r.ok) return false;
-    return r.json();
-  }).then(function(locks){
+  var base='https://atwad-booking-default-rtdb.firebaseio.com/';
+  var bookingUrl=base+'bookings/'+encodeURIComponent(bookingKey)+'.json';
+  var locksUrl=base+'slotLocks/'+encodeURIComponent(date)+'.json';
+  return Promise.all([
+    fetch(bookingUrl,{cache:'no-store'}).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;}),
+    fetch(locksUrl,{cache:'no-store'}).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;})
+  ]).then(function(results){
+    var booking=results[0];
+    var locks=results[1];
+    if(booking && typeof booking==='object') return true;
     if(!locks) return false;
     return Object.keys(locks).some(function(b){
       var lock=locks[b]||{};
       return lock.bookingKey===bookingKey || lock.ownerKey==='bookings:'+bookingKey;
     });
-  }).catch(function(){ return false; });
+  });
 }
 
 function showSubmitFailure(err,timedOut,isSlotConflict,unconfirmedWaUrl,submitStatus){
@@ -2100,7 +2109,7 @@ function showSubmitFailure(err,timedOut,isSlotConflict,unconfirmedWaUrl,submitSt
   var message=isSlotConflict
     ? 'هذا الوقت حُجز قبل إتمام طلبك أو يتداخل مع موعد قائم. ارجع إلى خطوة الموعد واختر وقتًا آخر.'
     : timedOut
-    ? 'تعذر تأكيد استلام الحجز خلال 18 ثانية بسبب الاتصال. لا تقلق: لن تبقى الصفحة معلّقة، ويمكنك إعادة المحاولة أو إرسال الطلب مباشرة عبر واتساب.'
+    ? 'تعذر تأكيد استلام الحجز بسبب بطء الاتصال. يمكنك إعادة المحاولة بأمان؛ النظام يستخدم نفس رقم الطلب ولن ينشئ حجزًا مكررًا.'
     : 'تعذر إرسال الحجز إلى النظام. يمكنك إعادة المحاولة أو إرسال بيانات الطلب مباشرة عبر واتساب.';
   if(submitStatus){
     submitStatus.className='submit-status error';
@@ -2113,7 +2122,7 @@ function showSubmitFailure(err,timedOut,isSlotConflict,unconfirmedWaUrl,submitSt
     showToast('⛔ الوقت محجوز. الرجاء اختيار موعد آخر.');
     setTimeout(function(){goStep(3);checkSlots(S.date);},900);
   } else {
-    showToast('⚠️ تعذر تأكيد الحجز؛ استخدم إعادة المحاولة أو واتساب.');
+    showToast('⚠️ لم يصل تأكيد الحفظ؛ يمكنك إعادة المحاولة بأمان.');
   }
 }
 function returnToAppointmentStep(){
@@ -2134,133 +2143,186 @@ function returnToAppointmentStep(){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
-/**
- * مسار احتياطي آمن عندما ترفض قواعد Firebase التحديث متعدد المسارات من الجذر.
- * يحجز يوم الموعد بمعاملة واحدة، ولا يعتبر الفترة محجوزة إلا عند وجود قفل فعلي
- * يملكه طلب آخر. ثم يكتب الحجز، ويزيل أقفاله إذا فشلت كتابة الحجز.
- */
-function writePublicBookingWithTransaction(key,bookingData,lockBlocks){
-  if(!db) {
-    var unavailable=new Error('Firebase SDK unavailable');
-    unavailable.code='FIREBASE_UNAVAILABLE';
-    return Promise.reject(unavailable);
-  }
-  var ownerKey='bookings:'+key;
-  var blockedKey=null;
-  var dayRef=db.ref('slotLocks/'+bookingData.date);
+function firebaseRestUrl(path){
+  return 'https://atwad-booking-default-rtdb.firebaseio.com/'+path+'.json';
+}
 
-  return dayRef.transaction(function(day){
-    day=day||{};
-    for(var i=0;i<lockBlocks.length;i++){
-      var current=day[lockBlocks[i]];
-      if(current&&current.ownerKey!==ownerKey&&current.bookingKey!==key){
-        blockedKey=lockBlocks[i];
-        return;
-      }
-    }
-    lockBlocks.forEach(function(blockKey){
-      day[blockKey]={
-        bookingKey:key,
-        ownerKey:ownerKey,
-        createdAt:firebase.database.ServerValue.TIMESTAMP
-      };
-    });
-    return day;
-  }).then(function(result){
-    if(!result.committed){
-      var conflict=new Error('هذا الوقت محجوز فعليًا أو يتداخل مع موعد قائم.');
-      conflict.code='SLOT_TAKEN';
-      conflict.block=blockedKey;
-      throw conflict;
-    }
-    return db.ref('bookings/'+key).set(bookingData).catch(function(writeError){
-      // لا نترك أقفالًا يتيمة إذا فشل إنشاء سجل الحجز.
-      return dayRef.transaction(function(day){
-        if(!day) return day;
-        lockBlocks.forEach(function(blockKey){
-          var current=day[blockKey];
-          if(current&&(current.ownerKey===ownerKey||current.bookingKey===key)) delete day[blockKey];
-        });
-        return Object.keys(day).length?day:null;
-      }).catch(function(cleanupError){
-        console.error('[booking] lock cleanup failed:',cleanupError);
-      }).then(function(){ throw writeError; });
+function bookingTimeoutError(){
+  var e=new Error('Booking confirmation timed out');
+  e.code='BOOKING_TIMEOUT';
+  return e;
+}
+
+/** طلب fetch بمهلة واضحة حتى لا يبقى زر «جاري الإرسال» معلقاً. */
+function fetchWithBookingTimeout(url,options,timeoutMs){
+  var controller=typeof AbortController!=='undefined'?new AbortController():null;
+  var opts=Object.assign({},options||{});
+  if(controller) opts.signal=controller.signal;
+  return new Promise(function(resolve,reject){
+    var finished=false;
+    var timer=setTimeout(function(){
+      if(finished) return;
+      finished=true;
+      if(controller) controller.abort();
+      reject(bookingTimeoutError());
+    },timeoutMs||12000);
+    fetch(url,opts).then(function(r){
+      if(finished) return;
+      finished=true; clearTimeout(timer); resolve(r);
+    }).catch(function(err){
+      if(finished) return;
+      finished=true; clearTimeout(timer);
+      if(err && err.name==='AbortError') reject(bookingTimeoutError());
+      else reject(err);
     });
   });
 }
 
-// إرسال الحجز عبر طلب HTTPS عادي؛ وهو أكثر ثباتًا على شبكات الجوال من انتظار
-// اتصال Firebase المستمر. المهلة تمنع بقاء العميل على "جاري الإرسال" بلا نهاية.
-function writePublicBooking(key,bookingData,timeoutMs){
-  var controller=typeof AbortController!=='undefined'?new AbortController():null;
-  var timeoutId=null;
-  var timedOut=false;
-  var timeoutPromise=new Promise(function(resolve,reject){
-    timeoutId=setTimeout(function(){
-      timedOut=true;
-      if(controller) controller.abort();
-      var timeoutError=new Error('Booking confirmation timed out');
-      timeoutError.code='BOOKING_TIMEOUT';
-      reject(timeoutError);
-    },timeoutMs);
+/**
+ * حجز أقفال اليوم عبر REST + ETag.
+ * هذا مهم لمتصفح واتساب والجوال: لا يعتمد على اتصال Firebase المستمر،
+ * ولا يحتاج PATCH من جذر القاعدة الذي قد ترفضه قواعد Firebase.
+ */
+function reserveBookingLocksRest(key,bookingData,lockBlocks,attempt){
+  attempt=attempt||0;
+  var ownerKey='bookings:'+key;
+  var dayPath='slotLocks/'+bookingData.date;
+  var dayUrl=firebaseRestUrl(dayPath);
+
+  return fetchWithBookingTimeout(dayUrl,{
+    method:'GET',
+    headers:{'X-Firebase-ETag':'true'},
+    cache:'no-store'
+  },10000).then(function(response){
+    if(!response.ok){
+      var readErr=new Error('Firebase locks read '+response.status);
+      readErr.code='FIREBASE_HTTP_'+response.status;
+      throw readErr;
+    }
+    var etag=response.headers.get('ETag')||'*';
+    return response.json().then(function(day){ return {etag:etag,day:day||{}}; });
+  }).then(function(state){
+    var day=state.day;
+    for(var i=0;i<lockBlocks.length;i++){
+      var current=day[lockBlocks[i]];
+      if(current && current.ownerKey!==ownerKey && current.bookingKey!==key){
+        var conflict=new Error('هذا الوقت محجوز فعليًا أو يتداخل مع موعد قائم.');
+        conflict.code='SLOT_TAKEN';
+        conflict.block=lockBlocks[i];
+        throw conflict;
+      }
+    }
+    lockBlocks.forEach(function(blockKey){
+      day[blockKey]={bookingKey:key,ownerKey:ownerKey,createdAt:{'.sv':'timestamp'}};
+    });
+    return fetchWithBookingTimeout(dayUrl,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json','If-Match':state.etag},
+      body:JSON.stringify(day),
+      cache:'no-store'
+    },12000);
+  }).then(function(response){
+    if(response.status===412 && attempt<4){
+      return reserveBookingLocksRest(key,bookingData,lockBlocks,attempt+1);
+    }
+    if(!response.ok){
+      var writeErr=new Error('Firebase locks write '+response.status);
+      writeErr.code='FIREBASE_HTTP_'+response.status;
+      throw writeErr;
+    }
+    return true;
   });
+}
+
+/** إزالة أقفال يملكها هذا الطلب فقط، وتستخدم عند فشل كتابة سجل الحجز. */
+function releaseBookingLocksRest(key,date,lockBlocks,attempt){
+  attempt=attempt||0;
+  var ownerKey='bookings:'+key;
+  var dayUrl=firebaseRestUrl('slotLocks/'+date);
+  return fetchWithBookingTimeout(dayUrl,{method:'GET',headers:{'X-Firebase-ETag':'true'},cache:'no-store'},8000)
+    .then(function(response){
+      if(!response.ok) return null;
+      var etag=response.headers.get('ETag')||'*';
+      return response.json().then(function(day){return {etag:etag,day:day||{}};});
+    }).then(function(state){
+      if(!state) return false;
+      var changed=false;
+      lockBlocks.forEach(function(blockKey){
+        var current=state.day[blockKey];
+        if(current && (current.ownerKey===ownerKey || current.bookingKey===key)){
+          delete state.day[blockKey]; changed=true;
+        }
+      });
+      if(!changed) return true;
+      var body=Object.keys(state.day).length?state.day:null;
+      return fetchWithBookingTimeout(dayUrl,{
+        method:'PUT',headers:{'Content-Type':'application/json','If-Match':state.etag},
+        body:JSON.stringify(body),cache:'no-store'
+      },8000).then(function(response){
+        if(response.status===412 && attempt<2) return releaseBookingLocksRest(key,date,lockBlocks,attempt+1);
+        return response.ok;
+      });
+    }).catch(function(err){
+      console.warn('[booking] lock cleanup skipped:',err);
+      return false;
+    });
+}
+
+/**
+ * مسار الحفظ النهائي:
+ * 1) يحجز الفترة بأقفال ذرية باستخدام ETag.
+ * 2) يكتب سجل bookings عبر HTTPS.
+ * 3) يقرأ السجل مرة أخرى للتأكد قبل إظهار النجاح للعميل.
+ */
+function writePublicBooking(key,bookingData,timeoutMs){
   var lockBlocks=bookingLockBlocks(bookingData.time,bookingData.duration);
   if(!bookingData.date||lockBlocks.length===0){
     return Promise.reject(new Error('تعذر تحديد فترة الموعد'));
   }
-  // كتابة الحجز وأقفال الوقت في طلب ذري واحد: إما تنجح جميعها أو لا يُكتب شيء.
-  // قواعد Firebase تمنع استبدال أي قفل موجود، وبذلك لا يمكن لحجزين متزامنين
-  // الاستيلاء على الفترة نفسها.
+
   var lockMap={};
-  lockBlocks.forEach(function(blockKey){ lockMap[blockKey]=true; });
+  lockBlocks.forEach(function(blockKey){lockMap[blockKey]=true;});
   var lastMinutes=lockBlockMinutes(lockBlocks[lockBlocks.length-1]);
   bookingData.lockBlocks=lockMap;
   bookingData.startBlock=lockBlocks[0];
   bookingData.endBlock=String(Math.floor((lastMinutes+30)/60)).padStart(2,'0')+
                        String((lastMinutes+30)%60).padStart(2,'0');
-  var atomicUpdate={};
-  atomicUpdate['bookings/'+key]=bookingData;
-  lockBlocks.forEach(function(blockKey){
-    atomicUpdate['slotLocks/'+bookingData.date+'/'+blockKey]={
-      bookingKey:key,
-      ownerKey:'bookings:'+key,
-      createdAt:firebase.database.ServerValue.TIMESTAMP
-    };
-  });
-  var url='https://atwad-booking-default-rtdb.firebaseio.com/.json';
-  var requestOptions={
-    method:'PATCH',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(atomicUpdate),
-    cache:'no-store'
-  };
-  if(controller) requestOptions.signal=controller.signal;
-  var requestPromise=fetch(url,requestOptions).then(function(response){
-    if(!response.ok){
-      // قد ترفض القواعد التحديث الذري من جذر القاعدة رغم سماحها بالكتابة
-      // في المسارين كلٌ على حدة. عندها نستخدم معاملة اليوم الآمنة كمسار بديل.
-      if(response.status===401||response.status===403){
-        return writePublicBookingWithTransaction(key,bookingData,lockBlocks);
-      }
-      var httpError=new Error('Firebase HTTP '+response.status);
-      httpError.code='FIREBASE_HTTP_'+response.status;
-      throw httpError;
-    }
-    return true;
-  }).catch(function(error){
-    if(timedOut){
-      var timeoutError=new Error('Booking confirmation timed out');
-      timeoutError.code='BOOKING_TIMEOUT';
-      throw timeoutError;
-    }
-    throw error;
-  });
-  return Promise.race([requestPromise,timeoutPromise]).then(function(result){
-    clearTimeout(timeoutId);
-    return result;
-  },function(error){
-    clearTimeout(timeoutId);
-    throw error;
+
+  // إذا كانت محاولة سابقة قد نجحت ثم ضاع الرد، لا نعيد الحفظ ولا نكرر الطلب.
+  return confirmBookingAlreadySaved(bookingData.date,key).then(function(alreadySaved){
+    if(alreadySaved) return true;
+
+    return reserveBookingLocksRest(key,bookingData,lockBlocks,0).then(function(){
+      var bookingUrl=firebaseRestUrl('bookings/'+key);
+      return fetchWithBookingTimeout(bookingUrl,{
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(bookingData),
+        cache:'no-store'
+      },Math.max(12000,Math.min(timeoutMs||24000,24000))).then(function(response){
+        if(!response.ok){
+          var e=new Error('Firebase booking write '+response.status);
+          e.code='FIREBASE_HTTP_'+response.status;
+          throw e;
+        }
+        return true;
+      });
+    }).then(function(){
+      // تأكيد نهائي من القاعدة؛ لا نعتمد فقط على اكتمال fetch.
+      return confirmBookingAlreadySaved(bookingData.date,key).then(function(saved){
+        if(saved) return true;
+        var e=new Error('Booking write not confirmed');
+        e.code='BOOKING_NOT_CONFIRMED';
+        throw e;
+      });
+    }).catch(function(err){
+      if(err && err.code==='SLOT_TAKEN') throw err;
+      // قد تكون الكتابة وصلت رغم انقطاع الرد؛ افحص أولاً قبل إزالة الأقفال.
+      return confirmBookingAlreadySaved(bookingData.date,key).then(function(saved){
+        if(saved) return true;
+        return releaseBookingLocksRest(key,bookingData.date,lockBlocks,0).then(function(){throw err;});
+      });
+    });
   });
 }
 
