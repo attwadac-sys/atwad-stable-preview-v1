@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="atwad-build" content="2026-09-02-booking-save-rest-lock-fix-v4">
+<meta name="atwad-build" content="2026-09-02-booking-atomic-rules-fix-v5">
 <title>مؤسسة أطواد - حجز خدمة</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
@@ -2018,7 +2018,7 @@ function submitBooking(){
       bookingData.lat = exactBookingLocation.lat;
       bookingData.lng = exactBookingLocation.lng;
     }
-    bookingData.locationSource = selectedLocationSource || (exactBookingLocation.hasCoordinates?'coordinates':'shared_maps_link');
+    // لا نرسل locationSource في الحجز العام؛ قواعد Firebase الحالية لا تسمح بهذا الحقل للزائر غير المسجل.
     bookingData.locationVerified = true;
 
     // إضافة دقة الموقع إذا كانت صالحة
@@ -2288,27 +2288,42 @@ function writePublicBooking(key,bookingData,timeoutMs){
   bookingData.endBlock=String(Math.floor((lastMinutes+30)/60)).padStart(2,'0')+
                        String((lastMinutes+30)%60).padStart(2,'0');
 
-  // إذا كانت محاولة سابقة قد نجحت ثم ضاع الرد، لا نعيد الحفظ ولا نكرر الطلب.
+  // قواعد Firebase الحالية تربط bookings و slotLocks ببعضهما: كل طرف يتحقق
+  // من وجود الطرف الآخر. لذلك يجب إنشاؤهما في PATCH واحد من جذر القاعدة.
+  // الكتابة على slotLocks أولاً ثم bookings ستُرفض للزائر غير المسجل حتى لو
+  // كانت الفترة خالية؛ وهذا كان سبب ظهور «غير مؤكد» في النسخة السابقة.
   return confirmBookingAlreadySaved(bookingData.date,key).then(function(alreadySaved){
     if(alreadySaved) return true;
 
-    return reserveBookingLocksRest(key,bookingData,lockBlocks,0).then(function(){
-      var bookingUrl=firebaseRestUrl('bookings/'+key);
-      return fetchWithBookingTimeout(bookingUrl,{
-        method:'PUT',
+    var atomicUpdate={};
+    atomicUpdate['bookings/'+key]=bookingData;
+    lockBlocks.forEach(function(blockKey){
+      atomicUpdate['slotLocks/'+bookingData.date+'/'+blockKey]={
+        bookingKey:key,
+        ownerKey:'bookings:'+key,
+        createdAt:{'.sv':'timestamp'}
+      };
+    });
+
+    return fetchWithBookingTimeout(
+      'https://atwad-booking-default-rtdb.firebaseio.com/.json',
+      {
+        method:'PATCH',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(bookingData),
+        body:JSON.stringify(atomicUpdate),
         cache:'no-store'
-      },Math.max(12000,Math.min(timeoutMs||24000,24000))).then(function(response){
-        if(!response.ok){
-          var e=new Error('Firebase booking write '+response.status);
-          e.code='FIREBASE_HTTP_'+response.status;
-          throw e;
-        }
-        return true;
-      });
+      },
+      Math.max(15000,Math.min(timeoutMs||30000,30000))
+    ).then(function(response){
+      if(!response.ok){
+        var e=new Error('Firebase atomic booking write '+response.status);
+        e.code='FIREBASE_HTTP_'+response.status;
+        throw e;
+      }
+      return true;
     }).then(function(){
-      // تأكيد نهائي من القاعدة؛ لا نعتمد فقط على اكتمال fetch.
+      // bookings غير مقروء للعامة حسب القواعد، لذلك التحقق العام يعتمد على
+      // slotLocks التي تسمح القواعد بقراءتها. كل قفل يحمل مفتاح الحجز نفسه.
       return confirmBookingAlreadySaved(bookingData.date,key).then(function(saved){
         if(saved) return true;
         var e=new Error('Booking write not confirmed');
@@ -2316,16 +2331,15 @@ function writePublicBooking(key,bookingData,timeoutMs){
         throw e;
       });
     }).catch(function(err){
-      if(err && err.code==='SLOT_TAKEN') throw err;
-      // قد تكون الكتابة وصلت رغم انقطاع الرد؛ افحص أولاً قبل إزالة الأقفال.
+      // إذا وصل PATCH إلى Firebase ثم انقطع رد الشبكة، لا نعتبره فشلاً قبل
+      // فحص الأقفال؛ هذا يمنع إرسال «غير مؤكد» لحجز تم تسجيله فعلاً.
       return confirmBookingAlreadySaved(bookingData.date,key).then(function(saved){
         if(saved) return true;
-        return releaseBookingLocksRest(key,bookingData.date,lockBlocks,0).then(function(){throw err;});
+        throw err;
       });
     });
   });
 }
-
 function goStep(n){
   document.querySelectorAll('.step-section').forEach(function(s){s.className='step-section';});
   document.getElementById('step'+n).className='step-section active';
